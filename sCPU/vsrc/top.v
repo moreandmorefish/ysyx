@@ -1,20 +1,5 @@
 module top(
     input clk,
-    input rst,
-    input [4:0] btn,
-    input [7:0] sw,
-    input ps2_clk,
-    input ps2_data,
-    input uart_rx,
-    output uart_tx,
-    output [15:0] ledr,
-    output VGA_CLK,
-    output VGA_HSYNC,
-    output VGA_VSYNC,
-    output VGA_BLANK_N,
-    output [7:0] VGA_R,
-    output [7:0] VGA_G,
-    output [7:0] VGA_B,
     output [7:0] seg0,
     output [7:0] seg1,
     output [7:0] seg2,
@@ -25,44 +10,117 @@ module top(
     output [7:0] seg7
 );
 
-led my_led(
-    .clk(clk),
-    .rst(rst),
-    .btn(btn),
-    .sw(sw),
-    .ledr(ledr)
+/* cpu */
+reg [31:0] instr;
+reg [4:0] rs1;
+reg [4:0] rs2;
+reg [4:0] rd;
+wire [3:0] ALUctr;
+wire ALUBsrc;
+reg less;
+reg zero;
+wire of;
+wire cf;
+wire zf;
+wire RegWr;
+wire PCAsrc;
+wire PCBsrc;
+reg [2:0] MemOp;
+reg MemtoReg;
+reg [31:0] pc_next;
+reg [2:0] branch;
+reg [31:0] ALUout;
+reg MemWr;
+reg [31:0] data_out;
+reg [6:0] opcode;
+reg [31:0] op1;
+reg [31:0] op2;
+reg [31:0] out;
+reg [31:0] imm;
+
+assign rs1 = instr[19:15];
+assign rs2 = instr[24:20];
+assign rd = instr[11:7];
+
+id my_id(
+  .instr(instr),
+  .imm(imm),
+  .ALUctr(ALUctr),
+  .ALUBsrc(ALUBsrc),
+  .RegWr(RegWr),
+  .branch(branch),
+  .MemOp(MemOp),
+  .MemtoReg(MemtoReg),
+  .MemWr(MemWr)
 );
 
-assign VGA_CLK = clk;
-
-wire [9:0] h_addr;
-wire [9:0] v_addr;
-wire [23:0] vga_data;
-
-vga_ctrl my_vga_ctrl(
-    .pclk(clk),
-    .reset(rst),
-    .vga_data(vga_data),
-    .h_addr(h_addr),
-    .v_addr(v_addr),
-    .hsync(VGA_HSYNC),
-    .vsync(VGA_VSYNC),
-    .valid(VGA_BLANK_N),
-    .vga_r(VGA_R),
-    .vga_g(VGA_G),
-    .vga_b(VGA_B)
+Branch my_branch(
+  .zf(zf),
+  .less(less),
+  .zero(zero),
+  .branch(branch),
+  .PCAsrc(PCAsrc),
+  .PCBsrc(PCBsrc)
 );
 
-ps2_keyboard my_keyboard(
-    .clk(clk),
-    .resetn(~rst),
-    .ps2_clk(ps2_clk),
-    .ps2_data(ps2_data)
+pc_reg my_pc(
+  .clk(clk),
+  .imm(imm),
+  .op1(op1),
+  .PCAsrc(PCAsrc),
+  .PCBsrc(PCBsrc),
+  .pc_next(pc_next)
+);
+
+instr_mem my_instrmem(
+  .instr_addr(pc_next),
+  .instr(instr)
+);
+
+always@(*)begin
+  case(MemtoReg)
+    1'b0: out = ALUout;
+    1'b1: out = data_out;
+  endcase
+end
+
+register my_reg(
+  .Wrclk(clk),
+  .RegWr(RegWr),
+  .Ra(rs1),
+  .Rb(rs2),
+  .Rw(rd),
+  .busA(op1),
+  .busB(op2),
+  .busW(out)
+);
+
+ALU my_alu(
+  .A(op1),
+  .rs2(op2),
+  .imm(imm),
+  .ALUctr(ALUctr),
+  .ALUBsrc(ALUBsrc),
+  .less(less),
+  .zero(zero),
+  .ALUout(ALUout),
+  .of(of),
+  .zf(zf),
+  .cf(cf)
+);
+
+Ram my_ram(
+  .Rdclk(clk),
+  .Wrclk(clk),
+  .Addr(ALUout),
+  .MemOp(MemOp),
+  .data_in(op2),
+  .Wr_en(MemWr),
+  .data_out(data_out)
 );
 
 seg my_seg(
-    .clk(clk),
-    .rst(rst),
+    .out_data(data_out),
     .o_seg0(seg0),
     .o_seg1(seg1),
     .o_seg2(seg2),
@@ -72,32 +130,4 @@ seg my_seg(
     .o_seg6(seg6),
     .o_seg7(seg7)
 );
-
-vmem my_vmem(
-    .h_addr(h_addr),
-    .v_addr(v_addr[8:0]),
-    .vga_data(vga_data)
-);
-
-uart my_uart(
-  .tx(uart_tx),
-  .rx(uart_rx)
-);
-
-endmodule
-
-module vmem(
-    input [9:0] h_addr,
-    input [8:0] v_addr,
-    output [23:0] vga_data
-);
-
-reg [23:0] vga_mem [524287:0];
-
-initial begin
-    $readmemh("resource/picture.hex", vga_mem);
-end
-
-assign vga_data = vga_mem[{h_addr, v_addr}];
-
 endmodule
