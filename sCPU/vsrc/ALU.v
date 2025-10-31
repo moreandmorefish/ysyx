@@ -1,132 +1,68 @@
 module ALU(
   input [31:0] A,  // rs1
-  input [31:0] rs2,
-  input [31:0] imm,
+  //B在EX阶段选择是rs2还是imm，由ALUBsrc决定，在top.v中已经处理好
+  input [31:0] B,  // rs2 or imm based on ALUBsrc
   input [3:0] ALUctr,
-  input ALUBsrc,
-  output reg less,  // cmp
-  output reg zero,  // equal
-  output reg [31:0] ALUout,
-  output reg of,zf,cf
+  output reg less,  // cmp 1: A < B, 0: A >= B
+  output reg zero,  // equal 1: A == B, 0: A != B
+  output reg of,    // 溢出标志（有符号）
+  output reg cf,    // 进位/借位标志（无符号）
+  output reg [31:0] ALUout
 );
+    always @(*) begin
+        // 初始化所有输出，避免生成latch
+        ALUout = 32'b0;
+        less = 1'b0;
+        zero = 1'b0;
+        of = 1'b0;
+        cf = 1'b0;
 
-reg [31:0] B;
-always @(*) begin
-    case(ALUBsrc)
-        1'b0: B = rs2;
-        1'b1: B = imm;
-    endcase
-end
-
-reg [31:0] xb;  // b after xor with cin
-
-always@(*)begin
-    ALUout = 32'd0; zero = 1'b0; less = 1'b0; of = 0; zf = 0; cf = 0; xb = 32'd0;
-
-    casez(ALUctr)
-    4'bz000 : // add or sub
-    begin
-        xb = B ^ { {32{ALUctr[3]}} };  // extend and xor
-        {cf,ALUout} = xb + A + {31'b0,ALUctr[3]};
-	of = (A[31] == xb[31]) && (ALUout[31] != A[31]);
-	zf = ~(|ALUout);
-        $display("A B ALUctr ALUout");
-        $display("%b %b %b %b",A,B,ALUctr,ALUout);
-    end
-
-    4'bz001:  // left shift
-    begin
-        ALUout = B[4] ? {A[15:0],16'b0} : A;
-        ALUout = B[3] ? {ALUout[23:0], 8'b0} : A;
-        ALUout = B[2] ? {ALUout[27:0], 4'b0} : ALUout;
-        ALUout = B[1] ? {ALUout[29:0], 2'b0} : ALUout;
-        ALUout = B[0] ? {ALUout[30:0], 1'b0} : ALUout; 
-    end
-    
-    4'b0010: // signed compare with sub
-    begin
-        xb = B ^ 32'b1;
-        {cf,ALUout} = xb + A + 32'b1;
-	    zf = ~(|ALUout);
-        if(zf == 1) begin 
-            zero = 1;
-            ALUout = 32'b0;
-        end
-        else begin
-            if(ALUout[31] == 1) begin
-                less = 1;
-                ALUout = 32'b1;
+        case(ALUctr)
+            // 4'b0000: begin // ADD（加法）
+            //     {cf, ALUout} = A + B;
+            //     of = (A[31] == B[31]) && (ALUout[31] != A[31]);
+            // end
+            4'b0000: begin // ADD（加法）
+                {cf, ALUout} = {1'b0, A} + {1'b0, B};  // 显式扩展为33位
+                of = (A[31] == B[31]) && (ALUout[31] != A[31]); // 有符号溢出判断
             end
-            else begin
-                ALUout = 32'b0;
-                less = 0;
+            // 4'b1000: begin // SUB（减法）
+            //     {cf, ALUout} = A + (~B) + 1;
+            //     of = (A[31] != B[31]) && (ALUout[31] != A[31]);
+            // end
+            4'b1000: begin // SUB（减法）
+                // 显式扩展为33位，避免位宽警告
+                {cf, ALUout} = {1'b0, A} + (~{1'b0, B}) + 1'b1;
+                of = (A[31] != B[31]) && (ALUout[31] != A[31]); // 有符号溢出判断
             end
-        end
-    end
+            4'b0001: ALUout = A << B[4:0];                // SLL（逻辑左移）
 
-    4'b1010: // unsigned compare with sub
-    begin
-        xb = B ^ 32'b1;
-        {cf,ALUout} = xb + A + 32'b1;
-	    zf = ~(|ALUout);
-        if(zf == 1) begin
-            zero = 1;
-            ALUout = 32'b0;
-        end
-        else begin
-            if(ALUout[31] == 1) begin
-                less = 1;
-                ALUout = 32'b1;
+            4'b0101: ALUout = A >> B[4:0];                // SRL（逻辑右移）
+
+            4'b1101: begin // SRA（算术右移，显式符号扩展）
+                ALUout = (A >> B[4:0]) | ({32{A[31]}} << (32 - B[4:0]));
             end
-            else begin
-                ALUout = 32'b0;
-                less = 0;
+
+            4'b0100: ALUout = A ^ B;                      // XOR（按位异或）
+
+            4'b0110: ALUout = A | B;                      // OR（按位或）
+
+            4'b0111: ALUout = A & B;                      // AND（按位与）
+
+            4'b0010: begin // SLT（有符号比较）
+                ALUout = {31'b0, ($signed(A) < $signed(B))}; // 扩展为32位
+                less = ALUout[0]; // 关联less信号
             end
-        end
+
+            4'b1010: begin // SLTU（无符号比较）
+                ALUout = {31'b0, (A < B)}; // 扩展为32位
+                less = ALUout[0]; // 关联less信号
+            end
+
+            default: ALUout = 32'b0;                      // 无效控制信号
+        endcase
+
+        // 统一判断结果是否为0（覆盖所有操作）
+        zero = (ALUout == 0);
     end
-
-    4'bz011: // straight
-    begin
-        ALUout = B;
-    end
-
-    4'bz100: // XOR
-    begin
-        ALUout = A ^ B;
-    end
-
-    4'bz101: // right shift
-    begin
-        if(ALUctr[3] == 0) begin // logical
-            ALUout = B[4] ? {16'b0, A[31:16]} : A;
-            ALUout = B[3] ? { 8'b0, ALUout[31:8]} : ALUout;
-            ALUout = B[2] ? { 4'b0, ALUout[31:4]} : ALUout;
-            ALUout = B[1] ? { 2'b0, ALUout[31:2]} : ALUout;
-            ALUout = B[0] ? { 1'b0, ALUout[31:1]} : ALUout;
-            $display("A B ALUctr ALUout");
-            $display("%b %b %b %b",A,B,ALUctr,ALUout);
-        end
-        else begin // athigram
-            ALUout = B[4] ? {{16{A[31]}}, A[31:16]} : A;
-            ALUout = B[3] ? {{ 8{ALUout[31]}}, ALUout[31:8]} : ALUout;
-            ALUout = B[2] ? {{ 4{ALUout[31]}}, ALUout[31:4]} : ALUout;
-            ALUout = B[1] ? {{ 2{ALUout[31]}}, ALUout[31:2]} : ALUout;
-            ALUout = B[0] ? {{ 1{ALUout[31]}}, ALUout[31:1]} : ALUout;
-            $display("A B ALUctr ALUout");
-            $display("%b %b %b %b",A,B,ALUctr,ALUout);
-        end
-    end
-
-    4'bz110:  // OR
-    ALUout = A | B;
-
-    4'bz111 : // AND
-    begin
-	ALUout = A & B;
-    end
-
-    default : ALUout = 32'd0;
-  endcase
-end
-
 endmodule

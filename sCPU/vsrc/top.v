@@ -1,5 +1,6 @@
 module top(
     input clk,
+    input reset,
     output [7:0] seg0,
     output [7:0] seg1,
     output [7:0] seg2,
@@ -10,117 +11,227 @@ module top(
     output [7:0] seg7
 );
 
-/* cpu */
-reg [31:0] instr;
-reg [4:0] rs1;
-reg [4:0] rs2;
-reg [4:0] rd;
-wire [3:0] ALUctr;
-wire ALUBsrc;
-reg less;
-reg zero;
-wire of;
-wire cf;
-wire zf;
-wire RegWr;
-wire PCAsrc;
-wire PCBsrc;
-reg [2:0] MemOp;
-reg MemtoReg;
-reg [31:0] pc_next;
-reg [2:0] branch;
-reg [31:0] ALUout;
-reg MemWr;
-reg [31:0] data_out;
-reg [6:0] opcode;
-reg [31:0] op1;
-reg [31:0] op2;
-reg [31:0] out;
-reg [31:0] imm;
+    // ---------------------------
+    // IF 阶段：取指 + PC 更新
+    // ---------------------------
+    wire [31:0] pc_current, next_pc;
+    wire [31:0] instr;
+    wire halt = (instr == 32'h00000013);
+    wire clk_cpu = clk & ~halt;
 
-assign rs1 = instr[19:15];
-assign rs2 = instr[24:20];
-assign rd = instr[11:7];
+    // PC寄存器
+    PC my_pc(
+        .clk(clk_cpu),
+        .halt(halt),
+        .reset(reset),
+        .next_pc(next_pc),
+        .pc(pc_current)
+    );
 
-id my_id(
-  .instr(instr),
-  .imm(imm),
-  .ALUctr(ALUctr),
-  .ALUBsrc(ALUBsrc),
-  .RegWr(RegWr),
-  .branch(branch),
-  .MemOp(MemOp),
-  .MemtoReg(MemtoReg),
-  .MemWr(MemWr)
-);
+    // 指令存储器（组合读）
+    instr_mem my_instr_mem(
+        .pc(pc_current),
+        .instr(instr)
+    );
 
-Branch my_branch(
-  .zf(zf),
-  .less(less),
-  .zero(zero),
-  .branch(branch),
-  .PCAsrc(PCAsrc),
-  .PCBsrc(PCBsrc)
-);
+    // IF/ID流水寄存器
+    wire [31:0] id_pc_in, id_instr_in;
+    IF_ID my_if_id(
+        .clk(clk_cpu),
+        .reset(reset),
+        .pc_in(pc_current),
+        .instr_in(instr),
+        .pc_out(id_pc_in),
+        .instr_out(id_instr_in)
+    );
 
-pc_reg my_pc(
-  .clk(clk),
-  .imm(imm),
-  .op1(op1),
-  .PCAsrc(PCAsrc),
-  .PCBsrc(PCBsrc),
-  .pc_next(pc_next)
-);
 
-instr_mem my_instrmem(
-  .instr_addr(pc_next),
-  .instr(instr)
-);
+    // ---------------------------
+    // ID 阶段：译码 + 读寄存器
+    // ---------------------------
+    wire [31:0] imm;
+    wire [3:0]  ALUctr;
+    wire        ALUBsrc;
+    wire        RegWr_ID;
+    wire [2:0]  branch_ID;
+    wire [2:0]  MemOp_ID;
+    wire        MemWr_ID;
+    wire        MemtoReg_ID;
+    wire [4:0]  rs1_ID, rs2_ID, rd_ID;
 
-always@(*)begin
-  case(MemtoReg)
-    1'b0: out = ALUout;
-    1'b1: out = data_out;
-  endcase
-end
+    // 控制译码
+    id my_decoder(
+        .instr_in(id_instr_in),
+        .imm(imm),
+        .ALUctr(ALUctr),
+        .ALUBsrc(ALUBsrc),
+        .RegWr(RegWr_ID),
+        .branch(branch_ID),
+        .MemOp(MemOp_ID),
+        .MemWr(MemWr_ID),
+        .MemtoReg(MemtoReg_ID),
+        .rs1(rs1_ID),
+        .rs2(rs2_ID),
+        .rd(rd_ID)
+    );
 
-register my_reg(
-  .Wrclk(clk),
-  .RegWr(RegWr),
-  .Ra(rs1),
-  .Rb(rs2),
-  .Rw(rd),
-  .busA(op1),
-  .busB(op2),
-  .busW(out)
-);
+    // 寄存器堆（组合读，同拍写）
+    wire [31:0] busA_ID, busB_ID;
+    wire [31:0] busW_WB;
+    wire [4:0]  rd_WB;
+    wire        RegWr_WB;
+    RegisterFile my_regfile(
+        .clk(clk_cpu),
+        .RegWr(RegWr_WB),
+        .Rw(rd_WB),
+        .busW(busW_WB),
+        .Ra(rs1_ID),
+        .Rb(rs2_ID),
+        .busA(busA_ID),
+        .busB(busB_ID)
+    );
 
-ALU my_alu(
-  .A(op1),
-  .rs2(op2),
-  .imm(imm),
-  .ALUctr(ALUctr),
-  .ALUBsrc(ALUBsrc),
-  .less(less),
-  .zero(zero),
-  .ALUout(ALUout),
-  .of(of),
-  .zf(zf),
-  .cf(cf)
-);
+    // ID/EX 流水寄存器
+    wire [31:0] ex_imm, ex_pc;
+    wire [3:0]  ex_ALUctr;
+    wire        ex_ALUBsrc, ex_RegWr, ex_MemWr, ex_MemtoReg;
+    wire [2:0]  ex_branch, ex_MemOp;
+    wire [4:0]  ex_rs1, ex_rs2, ex_rd;
+    ID_EX my_id_ex(
+        .clk(clk_cpu),
+        .reset(reset),
+        .imm_in(imm),
+        .ALUctr_in(ALUctr),
+        .ALUBsrc_in(ALUBsrc),
+        .RegWr_in(RegWr_ID),
+        .branch_in(branch_ID),
+        .MemOp_in(MemOp_ID),
+        .MemWr_in(MemWr_ID),
+        .MemtoReg_in(MemtoReg_ID),
+        .rs1_in(rs1_ID),
+        .rs2_in(rs2_ID),
+        .rd_in(rd_ID),
+        .pc_out(id_pc_in),
+        .imm(ex_imm),
+        .ALUctr(ex_ALUctr),
+        .ALUBsrc(ex_ALUBsrc),
+        .RegWr(ex_RegWr),
+        .branch(ex_branch),
+        .MemOp(ex_MemOp),
+        .MemWr(ex_MemWr),
+        .MemtoReg(ex_MemtoReg),
+        .rs1(ex_rs1),
+        .rs2(ex_rs2),
+        .rd(ex_rd),
+        .pc_to_ex(ex_pc)
+    );
 
-Ram my_ram(
-  .Rdclk(clk),
-  .Wrclk(clk),
-  .Addr(ALUout),
-  .MemOp(MemOp),
-  .data_in(op2),
-  .Wr_en(MemWr),
-  .data_out(data_out)
-);
+
+    // ---------------------------
+    // EX 阶段：ALU计算 + Branch
+    // ---------------------------
+    wire [31:0] alu_in2 = (ex_ALUBsrc) ? ex_imm : busB_ID;  // ALU第二操作数选择
+    wire [31:0] alu_out;
+    wire less, zero, of, cf;
+
+    ALU my_alu(
+        .A(busA_ID),
+        .B(alu_in2),
+        .ALUctr(ex_ALUctr),
+        .less(less),
+        .zero(zero),
+        .of(of),
+        .cf(cf),
+        .ALUout(alu_out)
+    );
+
+    wire [31:0] branch_target;
+    Branch my_branch(
+        .A(busA_ID),
+        .B(busB_ID),
+        .branch(ex_branch),
+        .zero(zero),
+        .less(less),
+        .pc_to_ex(ex_pc),
+        .imm(ex_imm),
+        .branch_target(branch_target)
+    );
+
+    // 下一条PC选择
+    assign next_pc = branch_target;  // 暂时直接使用（未加分支预测或flush逻辑）
+
+
+    // EX/MEM 流水寄存器
+    wire [31:0] mem_alu_out, mem_branch_target, mem_rs2_val;
+    wire [2:0]  mem_MemOp, mem_branch;
+    wire        mem_MemWr, mem_RegWr, mem_MemtoReg;
+    wire [4:0]  mem_rd;
+    EX_MEM my_ex_mem(
+        .clk(clk_cpu),
+        .reset(reset),
+        .alu_out_in(alu_out),
+        .branch_target_in(branch_target),
+        .rs2_val_in(busB_ID),
+        .mem_op_in(ex_MemOp),
+        .mem_wr_in(ex_MemWr),
+        .reg_wr_in(ex_RegWr),
+        .memtoreg_in(ex_MemtoReg),
+        .rd_in(ex_rd),
+        .branch_in(ex_branch),
+        .alu_out(mem_alu_out),
+        .branch_target(mem_branch_target),
+        .rs2_val(mem_rs2_val),
+        .mem_op(mem_MemOp),
+        .mem_wr(mem_MemWr),
+        .reg_wr(mem_RegWr),
+        .memtoreg(mem_MemtoReg),
+        .rd(mem_rd),
+        .branch(mem_branch)
+    );
+
+
+    // ---------------------------
+    // MEM 阶段：访存
+    // ---------------------------
+    wire [31:0] mem_data_out;
+
+    Ram my_ram(
+        .clk(clk_cpu),
+        .Addr_byte(mem_alu_out),
+        .MemOp(mem_MemOp),
+        .data_in(mem_rs2_val),
+        .Wr_en(mem_MemWr),
+        .data_out(mem_data_out)
+    );
+
+    // MEM/WB 流水寄存器
+    wire [31:0] wb_mem_data, wb_alu_out;
+    wire        wb_RegWr, wb_MemtoReg;
+    MEM_WB my_mem_wb(
+        .clk(clk_cpu),
+        .reset(reset),
+        .mem_data_in(mem_data_out),
+        .alu_out_in(mem_alu_out),
+        .reg_wr_in(mem_RegWr),
+        .memtoreg_in(mem_MemtoReg),
+        .rd_in(mem_rd),
+        .mem_data_out(wb_mem_data),
+        .alu_out_out(wb_alu_out),
+        .reg_wr_out(wb_RegWr),
+        .memtoreg_out(wb_MemtoReg),
+        .rd_out(rd_WB)
+    );
+
+
+    // ---------------------------
+    // WB 阶段：写回寄存器堆
+    // ---------------------------
+    assign busW_WB = (wb_MemtoReg) ? wb_mem_data : wb_alu_out;
+    assign RegWr_WB = wb_RegWr;
+
 
 seg my_seg(
-    .out_data(data_out),
+    .out_data(busW_WB),
     .o_seg0(seg0),
     .o_seg1(seg1),
     .o_seg2(seg2),

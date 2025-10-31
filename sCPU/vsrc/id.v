@@ -1,31 +1,38 @@
 module id(
-    input [31:0] instr,
-    output reg [31:0] imm,
-    output reg [3:0] ALUctr,
-    output reg ALUBsrc,
-    output reg RegWr,
-    output reg [2:0] branch,
-    output reg MemtoReg,
-    output reg [2:0] MemOp,
-    output reg MemWr
+    input [31:0] instr_in,                      //输入指令
+    output reg [31:0] imm,                      //立即数
+    output reg [3:0] ALUctr,                    //ALU控制信号，决定加减乘除操作
+    output reg ALUBsrc,                         //ALU第二操作数来源选择信号 0寄存器 1立即数
+    output reg RegWr,                           //寄存器写使能信号
+    output reg [2:0] branch,                    //分支类型
+    output reg [2:0] MemOp,                     //存储器操作类型
+    output reg MemWr,                           //存储器写使能信号
+    output reg MemtoReg,                        //写回寄存器数据来源选择信号
+    output reg [4:0] rs1,                         //源寄存器1地址
+    output reg [4:0] rs2,                         //源寄存器2地址
+    output reg [4:0] rd                          //目的寄存器地址
 );
+
+    // 提取字段
     reg [6:0] opcode;
     reg [2:0] func3;
     reg [6:0] func7;
-    reg [31:0] immI;
-    reg [31:0] immS;
-    reg [31:0] immB;
-    reg [31:0] immJ;
+    reg [31:0] immI, immS, immB, immJ;
 
-    assign opcode = instr[6:0];
-    assign func3  = instr[14:12];
-    assign func7  = instr[31:25];
-    assign immI = {{20{instr[31]}}, instr[31:20]};
-    assign immS = {{20{instr[31]}}, instr[31:25], instr[11:7]};
-    assign immB = {{20{instr[31]}}, instr[7], instr[30:25], instr[11:8], 1'b0};
-    assign immJ = {{12{instr[31]}}, instr[19:12], instr[20], instr[30:21], 1'b0};
+    always @(*) begin
+        rs1 = instr_in[19:15];
+        rs2 = instr_in[24:20];
+        rd = instr_in[11:7];
+        opcode = instr_in[6:0];
+        func3  = instr_in[14:12];
+        func7  = instr_in[31:25];
+        immI   = {{20{instr_in[31]}}, instr_in[31:20]};
+        immS   = {{20{instr_in[31]}}, instr_in[31:25],  instr_in[11:7]};
+        immB   = {{20{instr_in[31]}}, instr_in[7],      instr_in[30:25],    instr_in[11:8],     1'b0};
+        immJ   = {{12{instr_in[31]}}, instr_in[19:12],  instr_in[20],       instr_in[30:21],    1'b0};
+    end
 
-
+    //后面是具体的译码逻辑，比较繁杂，
     always @(*) begin
         case(opcode)
             7'b0010011: begin  // instr type I 
