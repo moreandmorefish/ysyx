@@ -21,7 +21,12 @@ module EX_MEM (
     output reg        reg_wr,
     output reg        memtoreg,
     output reg [4:0]  rd,
-    output reg [2:0]  branch
+    output reg [2:0]  branch,
+
+    // ✅ 新增：输出当前指令的 PC 值
+    input  [31:0] pc_in,
+    output reg [31:0] pc_out
+
 );
 
     always @(posedge clk or posedge reset) begin
@@ -35,6 +40,7 @@ module EX_MEM (
             memtoreg       <= 1'b0;
             rd             <= 5'b0;
             branch         <= 3'b0;
+            pc_out         <= 32'b0;  // ✅ 初始化 PC 值
         end else begin
             alu_out        <= alu_out_in;
             branch_target  <= branch_target_in;
@@ -45,6 +51,7 @@ module EX_MEM (
             memtoreg       <= memtoreg_in;
             rd             <= rd_in;
             branch         <= branch_in;
+            pc_out         <= pc_in;  // ✅ 传递 PC 值
         end
     end
 endmodule

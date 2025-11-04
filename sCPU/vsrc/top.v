@@ -1,6 +1,7 @@
 module top(
     input clk,
     input reset,
+    input handshake,
     output [7:0] seg0,
     output [7:0] seg1,
     output [7:0] seg2,
@@ -16,16 +17,18 @@ module top(
     // ---------------------------
     wire [31:0] pc_current, next_pc;
     wire [31:0] instr;
-    wire halt = (instr == 32'h00000013);
-    wire clk_cpu = clk & ~halt;
-
+    wire halt = (instr == 32'h00100073); // ebreak 指令作为 halt 信号
+    //wire clk_cpu = clk & ~halt;
+    wire clk_cpu = handshake;
+    wire jump_en;
     // PC寄存器
     PC my_pc(
         .clk(clk_cpu),
         .halt(halt),
         .reset(reset),
         .next_pc(next_pc),
-        .pc(pc_current)
+        .pc(pc_current),
+        .jump_en(jump_en)
     );
 
     // 指令存储器（组合读）
@@ -88,11 +91,12 @@ module top(
         .Ra(rs1_ID),
         .Rb(rs2_ID),
         .busA(busA_ID),
-        .busB(busB_ID)
+        .busB(busB_ID),
+        .pc_WB(wb_pc)
     );
 
     // ID/EX 流水寄存器
-    wire [31:0] ex_imm, ex_pc;
+    wire [31:0] ex_imm, ex_pc, busB_out, busA_out;
     wire [3:0]  ex_ALUctr;
     wire        ex_ALUBsrc, ex_RegWr, ex_MemWr, ex_MemtoReg;
     wire [2:0]  ex_branch, ex_MemOp;
@@ -113,6 +117,10 @@ module top(
         .rd_in(rd_ID),
         .pc_out(id_pc_in),
         .imm(ex_imm),
+        .busA_in(busA_ID),
+        .busA_out(busA_out),
+        .busB_in(busB_ID),
+        .busB_out(busB_out),
         .ALUctr(ex_ALUctr),
         .ALUBsrc(ex_ALUBsrc),
         .RegWr(ex_RegWr),
@@ -130,12 +138,12 @@ module top(
     // ---------------------------
     // EX 阶段：ALU计算 + Branch
     // ---------------------------
-    wire [31:0] alu_in2 = (ex_ALUBsrc) ? ex_imm : busB_ID;  // ALU第二操作数选择
+    wire [31:0] alu_in2 = (ex_ALUBsrc) ? ex_imm : busB_out;  // ALU第二操作数选择
     wire [31:0] alu_out;
     wire less, zero, of, cf;
 
     ALU my_alu(
-        .A(busA_ID),
+        .A(busA_out),
         .B(alu_in2),
         .ALUctr(ex_ALUctr),
         .less(less),
@@ -147,14 +155,15 @@ module top(
 
     wire [31:0] branch_target;
     Branch my_branch(
-        .A(busA_ID),
-        .B(busB_ID),
+        .A(busA_out),
+        .B(busB_out),
         .branch(ex_branch),
         .zero(zero),
         .less(less),
         .pc_to_ex(ex_pc),
         .imm(ex_imm),
-        .branch_target(branch_target)
+        .branch_target(branch_target),
+        .jump_en(jump_en)
     );
 
     // 下一条PC选择
@@ -166,12 +175,14 @@ module top(
     wire [2:0]  mem_MemOp, mem_branch;
     wire        mem_MemWr, mem_RegWr, mem_MemtoReg;
     wire [4:0]  mem_rd;
+    wire [31:0] mem_pc, wb_pc;
+
     EX_MEM my_ex_mem(
         .clk(clk_cpu),
         .reset(reset),
         .alu_out_in(alu_out),
         .branch_target_in(branch_target),
-        .rs2_val_in(busB_ID),
+        .rs2_val_in(busB_out),
         .mem_op_in(ex_MemOp),
         .mem_wr_in(ex_MemWr),
         .reg_wr_in(ex_RegWr),
@@ -186,7 +197,9 @@ module top(
         .reg_wr(mem_RegWr),
         .memtoreg(mem_MemtoReg),
         .rd(mem_rd),
-        .branch(mem_branch)
+        .branch(mem_branch),
+        .pc_in(ex_pc),         // 传入当前指令的PC
+        .pc_out(mem_pc)        // 输出到下一级
     );
 
 
@@ -207,6 +220,8 @@ module top(
     // MEM/WB 流水寄存器
     wire [31:0] wb_mem_data, wb_alu_out;
     wire        wb_RegWr, wb_MemtoReg;
+    wire [31:0] wb_pc;
+
     MEM_WB my_mem_wb(
         .clk(clk_cpu),
         .reset(reset),
@@ -219,7 +234,9 @@ module top(
         .alu_out_out(wb_alu_out),
         .reg_wr_out(wb_RegWr),
         .memtoreg_out(wb_MemtoReg),
-        .rd_out(rd_WB)
+        .rd_out(rd_WB),
+        .pc_in(mem_pc),        // 传入当前指令的PC
+        .pc_out(wb_pc)
     );
 
 

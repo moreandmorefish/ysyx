@@ -6,12 +6,13 @@ module Branch(
     input        less,        // 来自 ALU 的 less 标志（有符号比较）
     input [31:0] pc_to_ex,    // 当前指令对应的 PC 值
     input [31:0] imm,         // 分支偏移立即数
+    output reg jump_en,         // 是否进行跳转
     output reg [31:0] branch_target   // 跳转目标地址
 );
 
     always @(*) begin
         branch_target = pc_to_ex + imm;  // 默认目标地址为PC + imm
-
+        jump_en = 0;  // 默认不跳转
         case(branch)
             3'b100: begin  // BEQ: Branch if Equal
                 if (zero)  // 如果A和B相等
@@ -53,6 +54,7 @@ module Branch(
                 branch_target = pc_to_ex + 4;  // 默认跳转到下一条指令
             end
         endcase
+    jump_en = (branch_target != (pc_to_ex + 4));  // 如果目标地址不是下一条指令，则跳转
     end
 
 endmodule

@@ -1,6 +1,8 @@
 module ID_EX(
     input clk, reset,
     input [31:0] imm_in,
+    input [31:0] busA_in,
+    input [31:0] busB_in,
     input [3:0]  ALUctr_in,
     input        ALUBsrc_in,
     input        RegWr_in,
@@ -14,6 +16,8 @@ module ID_EX(
     output reg [31:0] pc_to_ex,
 
     output reg [31:0] imm,
+    output reg [31:0] busA_out,
+    output reg [31:0] busB_out,
     output reg [3:0]  ALUctr,
     output reg        ALUBsrc,
     output reg        RegWr,
@@ -28,11 +32,13 @@ module ID_EX(
             imm <= 0; ALUctr <= 0; ALUBsrc <= 0; RegWr <= 0;
             branch <= 0; MemOp <= 0; MemWr <= 0; MemtoReg <= 0;
             rs1 <= 0; rs2 <= 0; rd <= 0;pc_to_ex <= 0;
+            busB_out <= 0; busA_out <= 0;
         end else begin
             imm <= imm_in; ALUctr <= ALUctr_in; ALUBsrc <= ALUBsrc_in;
             RegWr <= RegWr_in; branch <= branch_in;
             MemOp <= MemOp_in; MemWr <= MemWr_in; MemtoReg <= MemtoReg_in;
             rs1 <= rs1_in; rs2 <= rs2_in; rd <= rd_in;pc_to_ex <= pc_out;
+            busB_out <= busB_in; busA_out <= busA_in;
         end
     end
 endmodule
