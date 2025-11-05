@@ -108,6 +108,7 @@ static int cmd_si(char *args) {
   }
   return 0;  
 }*/
+word_t vaddr_read(vaddr_t, int);
 
 static int cmd_x(char *args) {
   char *arg = strtok(NULL, " ");
@@ -147,7 +148,7 @@ static int cmd_x(char *args) {
   int direct = n > 0 ? 4 : -4;    // 地址增加的方向
   n = n > 0 ? n : -n;
   for ( ; n > 0; --n) {
-    word_t ret = paddr_read(address, 4);  // paddr_read已经做了地址合法性的检查
+    word_t ret = vaddr_read(address, 4);  // paddr_read已经做了地址合法性的检查
     printf(ANSI_FMT("0x%lx: ", ANSI_FG_BLUE), address);
     printf("0x%08x\n",ret);   // 4字节，16进制就有8个字符，右对其，高位补0
     address += direct;

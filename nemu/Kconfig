@@ -151,6 +151,15 @@ config ITRACE_COND
   string "Only trace instructions when the condition is true"
   default "true"
 
+### # 新增 RING_ITRACE 配置项 
+### config RING_ITRACE
+###   bool "Enable RING-style instruction trace"   
+###   default y  # 默认启用
+### 
+### # 新增 M_ITRACE 配置项
+### config M_ITRACE
+###   bool "Enable M-style instruction trace"
+###   default y
 
 config DIFFTEST
   depends on TARGET_NATIVE_ELF

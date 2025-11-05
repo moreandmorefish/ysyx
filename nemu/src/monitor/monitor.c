@@ -45,6 +45,13 @@ static char *log_file = NULL;
 static char *diff_so_file = NULL;
 static char *img_file = NULL;
 static int difftest_port = 1234;
+static char *elf_file = NULL;
+
+
+
+
+void print_ftrace(uint32_t inst_addr, uint32_t func_addr, int is_enter);
+void read_elf(const char* elf_path);
 
 static long load_img() {
   if (img_file == NULL) {
@@ -75,15 +82,18 @@ static int parse_args(int argc, char *argv[]) {
     {"diff"     , required_argument, NULL, 'd'},
     {"port"     , required_argument, NULL, 'p'},
     {"help"     , no_argument      , NULL, 'h'},
+    {"elf"      , required_argument, NULL, 'e'}, // 加入elf文件参数
     {0          , 0                , NULL,  0 },
   };
   int o;
-  while ( (o = getopt_long(argc, argv, "-bhl:d:p:", table, NULL)) != -1) {
+  while ( (o = getopt_long(argc, argv, "-e:bhl:d:p:", table, NULL)) != -1) {
     switch (o) {
       case 'b': sdb_set_batch_mode(); break;
       case 'p': sscanf(optarg, "%d", &difftest_port); break;
       case 'l': log_file = optarg; break;
       case 'd': diff_so_file = optarg; break;
+      // 加入elf文件参数
+      case 'e': elf_file = optarg; break;
       case 1: img_file = optarg; return 0;
       default:
         printf("Usage: %s [OPTION...] IMAGE [args]\n\n", argv[0]);
@@ -103,6 +113,8 @@ void init_monitor(int argc, char *argv[]) {
 
   /* Parse arguments. */
   parse_args(argc, argv);
+
+  read_elf(elf_file);
 
   /* Set random seed. */
   init_rand();
@@ -134,6 +146,104 @@ void init_monitor(int argc, char *argv[]) {
   welcome();
   printf("The executable is built-in.\n");
 }
+
+#include <elf.h>
+typedef struct ElfFunc {
+    uint32_t addr;  // 函数起始地址
+    uint32_t size;  // 函数体的大小
+    char* name;  // 函数名
+} ElfFunc;
+
+
+static ElfFunc* elfuncs = NULL;  // 函数项数组
+static int elfunc_num = 0; // 函数项的个数
+static char* elfunc_strtab = NULL;  // string table
+void read_elf(const char* elf_path) {
+    // 读取elf文件
+    FILE* fp = fopen(elf_path, "rb");
+    fseek(fp, 0, SEEK_END);
+    int elf_size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    unsigned char* elf = (unsigned char*)malloc(elf_size);
+    if(fread(elf, 1, elf_size, fp) != elf_size) {
+      panic("failed to read elf file %s", elf_path);
+    }
+    fclose(fp);
+
+    // 解析elf文件
+    elfunc_num = 0;
+    elfuncs = NULL;
+    elfunc_strtab = NULL;
+
+    Elf32_Ehdr* elf_header = (Elf32_Ehdr*)elf;
+    Elf32_Shdr* elf_shdrs = (Elf32_Shdr*)(elf + elf_header->e_shoff);
+    
+    // 读取string table
+    for (int si = 0; si < elf_header->e_shnum; si++) {
+        Elf32_Shdr shdr = elf_shdrs[si];
+        if (shdr.sh_type == SHT_STRTAB && si != elf_header->e_shstrndx) {
+            elfunc_strtab = (char*)malloc(shdr.sh_size);
+            memcpy(elfunc_strtab, elf + shdr.sh_offset, shdr.sh_size);
+            break;
+        }
+    }
+
+    // 解析symbol table
+    for (int si = 0; si < elf_header->e_shnum; si++) {
+        Elf32_Shdr shdr = elf_shdrs[si];
+        if (shdr.sh_type == SHT_SYMTAB) {
+            Elf32_Sym* symtab = (Elf32_Sym*)(elf + shdr.sh_offset);
+
+            // 获取symbol table中函数项的个数
+            for (int i = 0; i < shdr.sh_size / shdr.sh_entsize; i++) {
+                Elf32_Sym sym = symtab[i];
+                if (ELF32_ST_TYPE(sym.st_info) == STT_FUNC) {
+                    elfunc_num++;
+                }
+            }
+            
+            elfuncs = (ElfFunc*)malloc(sizeof(ElfFunc) * elfunc_num);
+            ElfFunc* item = elfuncs;
+            for (int i = 0; i < shdr.sh_size / shdr.sh_entsize; i++) {
+                Elf32_Sym sym = symtab[i];
+                if (ELF32_ST_TYPE(sym.st_info) == STT_FUNC) {
+                    item->addr = sym.st_value;
+                    item->size = sym.st_size;
+                    item->name = elfunc_strtab + sym.st_name;
+                    item += 1;
+                }
+            }
+        }
+    }
+    free(elf);
+}
+
+static int print_ftrace_level = 0;
+
+void print_ftrace(uint32_t inst_addr, uint32_t func_addr, int is_enter) {
+    printf("0x%08x: ", inst_addr);
+    if (is_enter != 1) {
+      print_ftrace_level--;
+    }
+    for (int i = 0; i < print_ftrace_level; i++) {
+        printf(" ");
+    }
+    if (is_enter == 1) {
+        print_ftrace_level++;
+        printf("call ");
+    }
+    else {
+        printf("ret ");
+    }
+    for (int i = 0; i < elfunc_num; i++) {
+        if (func_addr >= elfuncs[i].addr && func_addr < elfuncs[i].addr + elfuncs[i].size) {
+            printf("%s\n", elfuncs[i].name);
+            return; 
+        }
+    }
+    printf("???\n");
+}
+
 #else // CONFIG_TARGET_AM
 static long load_img() {
   extern char bin_start, bin_end;
@@ -152,4 +262,7 @@ void am_init_monitor() {
   welcome();
   printf("The executable is built-in.\n");
 }
+
+
+
 #endif
