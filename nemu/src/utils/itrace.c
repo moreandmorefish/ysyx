@@ -38,3 +38,24 @@ void display_inst() {
   } while ((i = (i+1)%MAX_IRINGBUF) != end);
   puts(ANSI_NONE);
 }
+
+char ringbuf[MAX_IRINGBUF][128];
+int ringbuf_pcur = 0;
+bool ringbuf_full = false;
+void add_ringbuf(const char* logbuf) {
+  p_cur = (p_cur + 1) % MAX_IRINGBUF;
+  full = full || p_cur == 0;
+  strcpy(ringbuf[p_cur], logbuf);
+}
+void display_ringbuf() {
+  if (!ringbuf_full && !ringbuf_pcur) return;
+
+  int end = ringbuf_pcur;
+  int i = ringbuf_full?ringbuf_pcur:0;
+
+  puts("Most recently executed instructions");
+  do {
+    printf("%s%s\n", (i+1)%MAX_IRINGBUF==end?" --> ":"     ", ringbuf[i]);
+
+  } while ((i = (i+1)%MAX_IRINGBUF) != end);
+}

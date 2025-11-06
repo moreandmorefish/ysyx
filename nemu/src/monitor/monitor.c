@@ -93,7 +93,7 @@ static int parse_args(int argc, char *argv[]) {
       case 'l': log_file = optarg; break;
       case 'd': diff_so_file = optarg; break;
       // 加入elf文件参数
-      case 'e': elf_file = optarg; break;
+      case 'e': elf_file = optarg; read_elf(elf_file); break;
       case 1: img_file = optarg; return 0;
       default:
         printf("Usage: %s [OPTION...] IMAGE [args]\n\n", argv[0]);
@@ -113,8 +113,6 @@ void init_monitor(int argc, char *argv[]) {
 
   /* Parse arguments. */
   parse_args(argc, argv);
-
-  read_elf(elf_file);
 
   /* Set random seed. */
   init_rand();
