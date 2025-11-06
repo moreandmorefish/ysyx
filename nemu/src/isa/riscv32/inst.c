@@ -22,27 +22,27 @@
 #define Mr vaddr_read
 #define Mw vaddr_write
 
-#define CONFIG_FTRACE 1
-void print_ftrace(uint32_t inst_addr, uint32_t func_addr, int is_enter);
-
-static void ftrace_jal(uint32_t inst_addr, uint32_t func_addr, int rd) {
-#ifdef CONFIG_FTRACE
-	if (rd == 1) {
-		print_ftrace(inst_addr, func_addr, 1);
-	}
-#endif
-}
-
-static void ftrace_jalr(uint32_t inst_addr, uint32_t func_addr, int rd, int rs1, int imm) {
-#ifdef CONFIG_FTRACE
-	if (rd == 0 && rs1 == 1 && imm == 0) {
-		print_ftrace(inst_addr, inst_addr, 0);
-	}
-	else if (rd == 1) {
-		print_ftrace(inst_addr, func_addr, 1);
-	}
-#endif
-}
+//#define CONFIG_FTRACE 1
+//void print_ftrace(uint32_t inst_addr, uint32_t func_addr, int is_enter);
+//
+//static void ftrace_jal(uint32_t inst_addr, uint32_t func_addr, int rd) {
+//#ifdef CONFIG_FTRACE
+//	if (rd == 1) {
+//		print_ftrace(inst_addr, func_addr, 1);
+//	}
+//#endif
+//}
+//
+//static void ftrace_jalr(uint32_t inst_addr, uint32_t func_addr, int rd, int rs1, int imm) {
+//#ifdef CONFIG_FTRACE
+//	if (rd == 0 && rs1 == 1 && imm == 0) {
+//		print_ftrace(inst_addr, inst_addr, 0);
+//	}
+//	else if (rd == 1) {
+//		print_ftrace(inst_addr, func_addr, 1);
+//	}
+//#endif
+//}
 
 enum {
   TYPE_I, TYPE_U, TYPE_S,

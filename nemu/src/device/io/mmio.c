@@ -52,12 +52,19 @@ void add_mmio_map(const char *name, paddr_t addr, void *space, uint32_t len, io_
 
   nr_map ++;
 }
-
+#define DTRACE 0
 /* bus interface */
 word_t mmio_read(paddr_t addr, int len) {
   return map_read(addr, len, fetch_mmio_map(addr));
+  #ifdef DTRACE
+    printf("mmio_read %s at 0x%x,%d \n", fetch_mmio_map(addr)->name, addr, len);
+  #endif
 }
 
 void mmio_write(paddr_t addr, int len, word_t data) {
   map_write(addr, len, data, fetch_mmio_map(addr));
+    #ifdef DTRACE
+      printf("mmio_write %s at 0x%x,%d with 0x%x\n", 
+        fetch_mmio_map(addr)->name, addr, len, data);
+    #endif
 }

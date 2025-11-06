@@ -3,9 +3,11 @@
 
 void __am_timer_init() {
 }
-
+#define CLK_TIME_TRACE
 void __am_timer_uptime(AM_TIMER_UPTIME_T *uptime) {
-  uptime->us = 0;
+  #ifdef CLK_TIME_TRACE
+    uptime->us = (uint64_t)inl(RTC_ADDR) + ((uint64_t)(inl(RTC_ADDR + 4)) << 32);
+  #endif
 }
 
 void __am_timer_rtc(AM_TIMER_RTC_T *rtc) {

@@ -3,20 +3,168 @@
 #include <klib-macros.h>
 #include <stdarg.h>
 
+#include <stdarg.h>
+#include <limits.h> 
+
 #if !defined(__ISA_NATIVE__) || defined(__NATIVE_USE_KLIB__)
+int itoa(int value, char *str, int base); 
+int vsprintf(char *out, const char *fmt, va_list ap);
 
 int printf(const char *fmt, ...) {
-  panic("Not implemented");
+    char buffer[1024];
+    va_list args;
+    va_start(args, fmt);
+    int ans = vsprintf(buffer, fmt, args);
+    for(int i = 0; i < ans; i++)
+        putch(buffer[i]);
+    va_end(args);
+    return ans;
 }
 
 int vsprintf(char *out, const char *fmt, va_list ap) {
+    char *buffer = out;
+    const char *buf_fmt = fmt;
+
+    while (*buf_fmt != '\0') {
+        // 溢出检查：限制最大写入长度 1023（留 1 字节给 '\0'）
+        if (buffer - out >= 1023) {
+            break;
+        }
+
+        if (*buf_fmt != '%') {
+            // 普通字符：直接拷贝
+            *buffer++ = *buf_fmt++;
+        } else {
+            buf_fmt++;  // 跳过 '%'
+            switch (*buf_fmt) {
+                case 'd': {
+                    int val = va_arg(ap, int);
+                    buffer += itoa(val, buffer, 10);
+                    buf_fmt++;
+                    break;
+                }
+                case 's': {
+                    char *str = va_arg(ap, char *);
+                    // 处理空指针（避免访问 NULL）
+                    if (str == NULL) {
+                        str = "(null)";
+                    }
+                    // 限制最大写入长度（避免无限循环）
+                    int max_len = 1023 - (buffer - out);
+                    while (*str != '\0' && max_len > 0) {
+                        *buffer++ = *str++;
+                        max_len--;
+                    }
+                    buf_fmt++;
+                    break;
+                }
+                // -------------------------- 新增 %x 分支 --------------------------
+                case 'x': {
+                    // %x 对应无符号整数（标准行为：忽略负号，按无符号解析）
+                    unsigned int val = va_arg(ap, unsigned int);
+                    // 调用 itoa，基数传 16（itoa 已支持 2-32 进制，且 digits 包含 a-f）
+                    // 注意：这里直接传 unsigned int 给 itoa 的 int 参数，不会溢出（因为 itoa 内部用 unsigned int 接收）
+                    buffer += itoa((int)val, buffer, 16);
+                    buf_fmt++;
+                    break;
+                }
+                // ------------------------------------------------------------------
+                default:
+                    // 未知格式符：拷贝 '%' 和当前字符
+                    *buffer++ = '%';
+                    if (buffer - out < 1023) {
+                        *buffer++ = *buf_fmt++;
+                    } else {
+                        buf_fmt++;  // 避免死循环（即使溢出也跳过当前字符）
+                    }
+                    break;
+            }
+        }
+    }
+
+    // 正确添加字符串结束符
+    *buffer = '\0';
+
+    // 返回写入的字符数（不含 '\0'）
+    return buffer - out;
+}
+
+int sprintf(char *out, const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    int ans = vsprintf(out, fmt, args);
+    va_end(args);
+    return ans;
+}
+
+int snprintf(char *out, size_t n, const char *fmt, ...) {
+  char *buffer = out;
+    const char *buf_fmt = fmt;
+    va_list args;
+
+    va_start(args, fmt);
+
+    while (*buf_fmt != '\0') {
+        // 溢出检查：限制最大写入长度 n（留 1 字节给 '\0'）
+        if (buffer - out >= n - 1) {
+            break;
+        }
+
+        if (*buf_fmt != '%') {
+            // 普通字符：直接拷贝
+            *buffer++ = *buf_fmt++;
+        } else {
+            buf_fmt++;  // 跳过 '%'
+            switch (*buf_fmt) {
+                case 'd': {
+                    int val = va_arg(args, int);
+                    // 调用修复后的 itoa，不会无限循环
+                    char tmp_buf[12]; // 临时缓冲区存储整数转换结果
+                    int len = itoa(val, tmp_buf, 10);
+                    // 将 tmp_buf 内容复制到 buffer，注意长度限制
+                    for(int i = 0; i < len && (buffer - out) < n - 1; i++) {
+                        *buffer++ = tmp_buf[i];
+                    }
+                    buf_fmt++;
+                    break;
+                }
+                case 's': {
+                    char *str = va_arg(args, char *);
+                    // 处理空指针（避免访问 NULL）
+                    if (str == NULL) {
+                        str = "(null)";
+                    }
+                    // 限制最大写入长度（避免无限循环）
+                    int max_len = n - (buffer - out) - 1;
+                    while (*str != '\0' && max_len > 0) {
+                        *buffer++ = *str++;
+                        max_len--;
+                    }
+                    buf_fmt++;
+                    break;
+                }
+                default:
+                    // 未知格式符：拷贝 '%' 和当前字符
+                    *buffer++ = '%';
+                    if ((buffer - out) < n - 1) *buffer++ = *buf_fmt++;
+                    break;
+            }
+        }
+    }
+
+    // 正确添加字符串结束符
+    *buffer = '\0';
+
+    va_end(args);
+
+    // 返回写入的字符数（不含 '\0'）
+    return buffer - out;
+}
+
+int vsnprintf(char *out, size_t n, const char *fmt, va_list ap) {
   panic("Not implemented");
 }
 
-#include <stdarg.h>
-#include <limits.h>  // 用于 INT_MIN
-
-// 修复后的 itoa：处理 INT_MIN、正确反转、正确添加 '\0'
 int itoa(int value, char *str, int base) {
     // 1. 检查基数合法性
     if (base < 2 || base > 32) {
@@ -72,74 +220,6 @@ int itoa(int value, char *str, int base) {
 
     // 返回字符串长度（含负号，不含 '\0'）
     return str - start;
-}
-
-// 修复后的 sprintf：%s 长度限制 + 空指针处理
-int sprintf(char *out, const char *fmt, ...) {
-    char *buffer = out;
-    const char *buf_fmt = fmt;
-    va_list args;
-
-    va_start(args, fmt);
-
-    while (*buf_fmt != '\0') {
-        // 溢出检查：限制最大写入长度 1023（留 1 字节给 '\0'）
-        if (buffer - out >= 1023) {
-            break;
-        }
-
-        if (*buf_fmt != '%') {
-            // 普通字符：直接拷贝
-            *buffer++ = *buf_fmt++;
-        } else {
-            buf_fmt++;  // 跳过 '%'
-            switch (*buf_fmt) {
-                case 'd': {
-                    int val = va_arg(args, int);
-                    // 调用修复后的 itoa，不会无限循环
-                    buffer += itoa(val, buffer, 10);
-                    buf_fmt++;
-                    break;
-                }
-                case 's': {
-                    char *str = va_arg(args, char *);
-                    // 处理空指针（避免访问 NULL）
-                    if (str == NULL) {
-                        str = "(null)";
-                    }
-                    // 限制最大写入长度（避免无限循环）
-                    int max_len = 1023 - (buffer - out);
-                    while (*str != '\0' && max_len > 0) {
-                        *buffer++ = *str++;
-                        max_len--;
-                    }
-                    buf_fmt++;
-                    break;
-                }
-                default:
-                    // 未知格式符：拷贝 '%' 和当前字符
-                    *buffer++ = '%';
-                    *buffer++ = *buf_fmt++;
-                    break;
-            }
-        }
-    }
-
-    // 正确添加字符串结束符
-    *buffer = '\0';
-
-    va_end(args);
-
-    // 返回写入的字符数（不含 '\0'）
-    return buffer - out;
-}
-
-int snprintf(char *out, size_t n, const char *fmt, ...) {
-  panic("Not implemented");
-}
-
-int vsnprintf(char *out, size_t n, const char *fmt, va_list ap) {
-  panic("Not implemented");
 }
 
 #endif
