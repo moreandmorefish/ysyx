@@ -156,6 +156,7 @@ typedef struct ElfFunc {
 static ElfFunc* elfuncs = NULL;  // 函数项数组
 static int elfunc_num = 0; // 函数项的个数
 static char* elfunc_strtab = NULL;  // string table
+void read_func(unsigned char*);
 void read_elf(const char* elf_path) {
     // 读取elf文件
     FILE* fp = fopen(elf_path, "rb");
@@ -167,8 +168,12 @@ void read_elf(const char* elf_path) {
       panic("failed to read elf file %s", elf_path);
     }
     fclose(fp);
-
-    // 解析elf文件
+    read_func(elf);
+    free(elf);
+}
+void read_func(unsigned char* elf)
+{
+  // 解析elf文件
     elfunc_num = 0;
     elfuncs = NULL;
     elfunc_strtab = NULL;
@@ -213,9 +218,7 @@ void read_elf(const char* elf_path) {
             }
         }
     }
-    free(elf);
 }
-
 static int print_ftrace_level = 0;
 
 void print_ftrace(uint32_t inst_addr, uint32_t func_addr, int is_enter) {

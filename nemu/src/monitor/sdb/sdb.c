@@ -160,7 +160,7 @@ static int cmd_p(char* args) {
   bool success;
   word_t res = expr(args, &success);
   if (!success) {
-    puts("invalid expression");
+    puts("cmd_p invalid expression");
   } else {
     printf("%u\n", res);
   }
@@ -198,7 +198,7 @@ static int cmd_w(char* args) {
   bool success;
   word_t res = expr(args, &success);
   if (!success) {
-    puts("invalid expression");
+    puts("cmd_w invalid expression");
   } else {
     wp_watch(args, res);
   }
