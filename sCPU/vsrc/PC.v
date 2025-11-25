@@ -5,15 +5,17 @@ module PC(
     input jump_en,
     output reg [31:0] pc
 );
+    initial begin
+        pc = 32'h80000000;
+    end
     always @(posedge clk or posedge reset) begin
         if (reset)
-            pc <= 32'h0000_0000;
-        else begin
-            if (!halt && jump_en)
+            pc <= 32'h80000000;
+        else if (!halt) begin
+            if (jump_en)
                 pc <= next_pc;
-            else if(!halt && !jump_en)
-                pc <= pc+4;
-            else pc <= pc;
+            else
+                pc <= pc + 4;
         end
     end
 endmodule
