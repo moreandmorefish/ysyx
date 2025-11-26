@@ -214,6 +214,35 @@ module top(
     );
 
     // =======================================================
+    // harzard模块，这里通过数据前递，保证数据是正确的
+    // =======================================================
+    wire [31:0] hazard_jump_rd_data_from_ex_mem;
+    assign hazard_jump_rd_data_from_ex_mem = ((id_ex_branch==3'b010) ||(id_ex_branch==3'b001))?
+                                                (id_ex_pc+4):ex_alu_out;
+    wire [31:0] hazard_A_out;
+    wire [31:0] hazard_B_out;
+
+    hazard my_hazard(
+        .srcA_no(id_rs1),
+        .srcA_data(id_busA),
+        .srcB_no(id_rs2),
+        .srcB_data(id_busB),
+
+        .ex_mem_in_rd(id_ex_RegWr?id_ex_rd:5'b0),
+        .ex_mem_in_data(hazard_jump_rd_data_from_ex_mem),
+
+        .ram_in_rd(ex_mem_RegWr?ex_mem_rd:5'b0),
+        .ram_in_data(ex_mem_alu_out),
+        .mem_wb_in_rd(mem_RegWr?mem_rd:5'b0),
+        .mem_wb_in_data(mem_alu_out),
+        .wb_in_rd(mem_wb_RegWr?mem_wb_rd:5'b0),
+        .wb_in_data(wb_write_data),
+
+        .hazard_out_A(hazard_A_out),
+        .hazard_out_B(hazard_B_out)
+    );
+
+    // =======================================================
     // ID_EX 流水寄存器（EX 阶段的所有输入在此锁存）
     // =======================================================
     ID_EX my_id_ex(
@@ -221,8 +250,8 @@ module top(
         .reset            (reset),
 
         .imm_in           (id_imm),
-        .busA_in          (id_busA),
-        .busB_in          (id_busB),
+        .busA_in          (hazard_A_out),        //连接前递模块
+        .busB_in          (hazard_B_out),        //连接前递模块
         .ALUctr_in        (id_ALUctr),
         .ALUBsrc_in       (id_ALUBsrc),
         .RegWr_in         (id_RegWr),
@@ -401,11 +430,10 @@ module top(
     // 利用 mem_wb_branch 判断是否是 JAL / JALR：
     //   对于 JAL / JALR：写回 PC+4
     //   对于普通指令：  根据 mem_wb_MemtoReg 决定写回 mem 或 alu
-    wire is_jal  = (mem_wb_branch == 3'b001);
-    wire is_jalr = (mem_wb_branch == 3'b010);
+    // wire is_jal  = (mem_wb_branch == 3'b001);
+    // wire is_jalr = (mem_wb_branch == 3'b010);
 
     assign wb_write_data =
-        (is_jal || is_jalr) ? (mem_wb_pc + 32'd4) :
         (mem_wb_MemtoReg     ? mem_wb_mem_data     : mem_wb_alu_out);
 
     // =======================================================

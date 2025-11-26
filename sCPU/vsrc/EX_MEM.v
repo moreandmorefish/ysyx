@@ -57,7 +57,11 @@ module EX_MEM (
             if(a0 != 32'b0) cpu_halt(1);
             else cpu_halt(0);
         end else begin
-            alu_out   <= alu_out_in;
+            if (branch_in == 3'b010 || branch_in == 3'b001) begin
+                alu_out <= pc_in + 32'd4; 
+            end else begin
+                alu_out <= alu_out_in;
+            end
             rs2_val   <= rs2_val_in;
             mem_op    <= mem_op_in;
             mem_wr    <= mem_wr_in;
