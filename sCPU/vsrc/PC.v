@@ -1,8 +1,8 @@
 module PC(
     input clk, reset,
-    input halt,
     input [31:0] next_pc,
     input jump_en,
+    input stall,
     output reg [31:0] pc
 );
     initial begin
@@ -11,11 +11,14 @@ module PC(
     always @(posedge clk or posedge reset) begin
         if (reset)
             pc <= 32'h80000000;
-        else if (!halt) begin
-            if (jump_en)
-                pc <= next_pc;
-            else
-                pc <= pc + 4;
+        else if (jump_en) begin
+            pc <= next_pc;
+        end
+        else if (stall) begin
+            pc <= pc;
+        end
+        else begin
+            pc <= pc+4;
         end
     end
 endmodule

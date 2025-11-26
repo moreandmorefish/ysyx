@@ -3,6 +3,7 @@ module instr_mem(
     input         clk,
     input  [31:0] pc,
     input flush,
+    input stall,
     output reg [31:0] pc_addr,
     output reg [31:0] instr
 );
@@ -10,7 +11,12 @@ module instr_mem(
         if(flush)begin
             instr <= 32'h00000013;
             pc_addr <=pc_addr;
-        end else begin
+        end 
+        else if(stall) begin
+            instr <= instr;
+            pc_addr <= pc_addr;
+        end
+        else begin
             instr <= pmem_read(pc);   // 同步读
             pc_addr <= pc;
         end

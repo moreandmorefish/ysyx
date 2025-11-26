@@ -140,7 +140,7 @@ module top(
     // jump_en 作为一个辅助信号，在该设计中传入便于 PC 内部后续扩展（例如停止更新等）
     PC my_pc(
         .clk     (clk_cpu),
-        .halt    (),            // 目前未使用
+        .stall   (stall),
         .reset   (reset),
         .next_pc (next_pc),     // 来自 EX/Branch 的下一条 PC 选择
         .pc      (pc_current),  // 当前 PC 输出
@@ -153,6 +153,7 @@ module top(
     wire [31:0] instr_mem_pc_addr;
     instr_mem my_instr_mem(
         .clk   (clk_cpu),
+        .stall (stall),
         .pc    (pc_current),
         .flush (ex_jump_en),
         .instr (instr),
@@ -170,7 +171,8 @@ module top(
         .instr_in  (instr),
         .pc_out    (if_id_pc),       // 送入 ID 的 PC
         .instr_out (if_id_instr),    // 送入 ID 的指令
-        .flush     (ex_jump_en)      // EX 决定跳转时清空 IF/ID
+        .flush     (ex_jump_en),      // EX 决定跳转时清空 IF/ID
+        .stall     (stall)
     );
 
     // =======================================================
@@ -242,6 +244,20 @@ module top(
         .hazard_out_A(hazard_A_out),
         .hazard_out_B(hazard_B_out)
     );
+    // =======================================================
+    // LOAD_USE 检测模块，这里检测是否存在 LOAD_USE冒险
+    // =======================================================
+    wire stall;
+    loaduse my_loaduse(
+        .id_rs1(id_rs1),
+        .id_rs2(id_rs2),
+        .id_ex_rd_no(id_ex_rd),
+        .id_ex_read_en(id_ex_MemRd),
+        .ex_mem_rd(ex_mem_rd),
+        .ex_mem_read_en(ex_mem_MemRd),
+        .stall(stall)
+    );
+
 
     // =======================================================
     // ID_EX 流水寄存器（EX 阶段的所有输入在此锁存）
@@ -249,7 +265,8 @@ module top(
     ID_EX my_id_ex(
         .clk              (clk_cpu),
         .reset            (reset),
-
+        .stall            (stall),
+        // 输入（来自 ID 阶段）
         .imm_in           (id_imm),
         .busA_in          (hazard_A_out),        //连接前递模块
         .busB_in          (hazard_B_out),        //连接前递模块
@@ -441,32 +458,43 @@ module top(
     // 调试输出（DPI + 波形观察）
     // =======================================================
     import "DPI-C" function int pmem_read(input int raddr);
-
+    integer cycle_count = 0;
     always @(posedge clk_cpu) begin
         if (!reset) begin
+            cycle_count = cycle_count + 1;
+            $display("-------- Cycle %0d --------", cycle_count);
+            // IF 阶段
             $display("=====================================");
-            $display("PC=0x%h instr=0x%h jump=%b target=0x%h",
-                     pc_current, instr, ex_jump_en, ex_branch_target);
-
+            //pc发射指令需要一拍
+            $display("PC发射指令PC=0x%h ", pc_current);
+            //取指还需要一拍
+            $display("取指instr=0x%h jump=%b target=0x%h",instr, ex_jump_en, ex_branch_target);
             // ID 阶段
-            $display("ID 阶段：rs1=R%0d, rs2=R%0d, rd=R%0d, imm=0x%h",
+            $display("进入 ID 阶段：rs1=R%0d, rs2=R%0d, rd=R%0d, imm=0x%h",
                      id_rs1, id_rs2, id_rd, id_imm);
-            $display("ID 控制：RegWr=%b, MemOp=0x%0h, MemWr=%b, MemRd=%b, MemtoReg=%b, ALUBsrc=%b, branch=0x%0h",
+            $display("ID 译码结果：RegWr=%b, MemOp=0x%0h, MemWr=%b, MemRd=%b, MemtoReg=%b, ALUBsrc=%b, branch=0x%0h",
                      id_RegWr, id_MemOp, id_MemWr, id_MemRd, id_MemtoReg, id_ALUBsrc, id_branch);
 
             // EX 阶段
-            $display("EX 阶段：ALUctr=0x%0h, A=0x%h, B=0x%h, ALUout=0x%h, zero=%b, less=%b",
+            $display("进入 EX 阶段：ALUctr=0x%0h, A=0x%h, B=0x%h, ALUout=0x%h, zero=%b, less=%b",
                      id_ex_ALUctr, id_ex_busA, ex_alu_in2, ex_alu_out, ex_zero, ex_less);
             $display("EX 分支：branch=0x%0h, pc_ex=0x%h, imm=0x%h",
                      id_ex_branch, id_ex_pc, id_ex_imm);
 
             // MEM 阶段
-            $display("MEM 阶段：Addr_byte=0x%h, 写数据=0x%h, 读数据=0x%h, Wr_en=%b, Rd_en=%b",
+            $display("进入 MEM 阶段：Addr_byte=0x%h, 写数据=0x%h, 读数据=0x%h, Wr_en=%b, Rd_en=%b",
                      ex_mem_alu_out, ex_mem_rs2_val, mem_mem_data, ex_mem_MemWr, ex_mem_MemRd);
-
+            //ram访存需要一拍
+            $display("MEM 控制信号：RegWr=%b, MemtoReg=%b",
+                     mem_RegWr, mem_MemtoReg);
             // WB 阶段
-            $display("WB 阶段：写回 R%0d, 写回数据=0x%h, RegWr=%b, MemtoReg=%b, branch=0x%0h",
+            $display("进入 WB 阶段：写回 R%0d, 写回数据=0x%h, RegWr=%b, MemtoReg=%b, branch=0x%0h",
                      mem_wb_rd, wb_write_data, mem_wb_RegWr, mem_wb_MemtoReg, mem_wb_branch);
+            //实际写回还需要一拍
+            $display("实际写回 R%0d, 写回数据=0x%h",
+                     mem_wb_rd, wb_write_data);
+
+            $display("a0=0x%h", reg_a0);
 
             // 内存关键地址观察：0x80000020 ~ 0x80000023
             //$display("内存状态：0x20=0x%02h, 0x21=0x%02h, 0x22=0x%02h, 0x23=0x%02h",
@@ -478,8 +506,8 @@ module top(
     end
 
     // 单独观察 a0（x10）寄存器的变化
-    always @(posedge clk_cpu) begin
-        $display("a0=0x%h", reg_a0);
-    end
+    // always @(posedge clk_cpu) begin
+    //     $display("a0=0x%h", reg_a0);
+    // end
 
 endmodule

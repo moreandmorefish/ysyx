@@ -36,7 +36,7 @@ module RegisterFile(
         //     regfile[2],                             // x2：直接读regfile[2]
         //     regfile[3],                             // x3：直接读regfile[3]
         //     regfile[4]);                            // x4：直接读regfile[4]
-        $display(" Cycle=%0d", cycle_count);
+        //$display(" Cycle=%0d", cycle_count);
     end
 
     //always @(*) begin

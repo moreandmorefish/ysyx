@@ -1,5 +1,6 @@
 module ID_EX(
     input clk, reset, flush,
+    input stall,
     input [31:0] imm_in,
     input [31:0] busA_in,  // rs1 数据（来自RegisterFile.busA）
     input [31:0] busB_in,  // rs2 数据（来自RegisterFile.busB）
@@ -52,7 +53,7 @@ always @(posedge clk or posedge reset) begin
         pc_to_ex <= 32'b0;
         ie_illegal_instr <= 1'b0;
         ie_a0 <= 32'b0;
-    end else if (flush) begin
+    end else if (flush | stall) begin
         // 冲刷流水线：清零所有控制信号和数据信号（避免气泡）
         imm <= 32'b0;
         busA_out <= 32'b0;
