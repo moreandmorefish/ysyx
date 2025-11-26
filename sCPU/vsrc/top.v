@@ -219,6 +219,7 @@ module top(
     wire [31:0] hazard_jump_rd_data_from_ex_mem;
     assign hazard_jump_rd_data_from_ex_mem = ((id_ex_branch==3'b010) ||(id_ex_branch==3'b001))?
                                                 (id_ex_pc+4):ex_alu_out;
+    wire [31:0] hazard_data_from_mem_wb = mem_MemtoReg ? mem_mem_data : mem_alu_out;                                     
     wire [31:0] hazard_A_out;
     wire [31:0] hazard_B_out;
 
@@ -234,7 +235,7 @@ module top(
         .ram_in_rd(ex_mem_RegWr?ex_mem_rd:5'b0),
         .ram_in_data(ex_mem_alu_out),
         .mem_wb_in_rd(mem_RegWr?mem_rd:5'b0),
-        .mem_wb_in_data(mem_alu_out),
+        .mem_wb_in_data(hazard_data_from_mem_wb),
         .wb_in_rd(mem_wb_RegWr?mem_wb_rd:5'b0),
         .wb_in_data(wb_write_data),
 
