@@ -1,24 +1,23 @@
 import "DPI-C" function int pmem_read(input int addr);// 
 module instr_mem(
-    input         clk,
+    input         clk, 
     input  [31:0] pc,
-    input flush,
-    input stall,
-    output reg [31:0] pc_addr,
+    input         flush,
+    input         stall,
+    output [31:0] pc_addr,
     output reg [31:0] instr
 );
+    // 1. PC 直接透传 (组合逻辑)
+    assign pc_addr = pc;
+
+    // 2. 指令读取改为组合逻辑 (去掉 posedge clk)
     always @(posedge clk) begin
-        if(flush)begin
-            instr <= 32'h00000013;
-            pc_addr <=pc_addr;
+        if (flush) begin
+            instr = 32'h00000013;
         end 
-        else if(stall) begin
-            instr <= instr;
-            pc_addr <= pc_addr;
-        end
+        // 注意：组合逻辑不需要处理 stall，因为 stall 时 pc 输入本身就不变
         else begin
-            instr <= pmem_read(pc);   // 同步读
-            pc_addr <= pc;
+            instr = pmem_read(pc); 
         end
     end
 endmodule

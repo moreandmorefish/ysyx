@@ -141,7 +141,7 @@ module top(
     PC my_pc(
         .clk     (clk_cpu),
         .stall   (stall),
-        .reset   (reset),
+        .reset   (),
         .next_pc (next_pc),     // 来自 EX/Branch 的下一条 PC 选择
         .pc      (pc_current),  // 当前 PC 输出
         .jump_en (ex_jump_en)   // 直接使用 EX 阶段输出的跳转使能
@@ -166,7 +166,7 @@ module top(
     // flush = ex_jump_en 时，IF_ID 会把输出清零（相当于插入一个 bubble）
     IF_ID my_if_id(
         .clk       (clk_cpu),
-        .reset     (reset),
+        .reset     (),
         .pc_in     (instr_mem_pc_addr),
         .instr_in  (instr),
         .pc_out    (if_id_pc),       // 送入 ID 的 PC
@@ -200,12 +200,13 @@ module top(
     // =======================================================
     // 写端：来自 WB 阶段（即 MEM_WB 寄存器输出）
     // 读端：使用 ID 阶段解析出的 rs1 / rs2
+    wire [31:0] wb_data_out;
     RegisterFile my_regfile(
         .clk   (clk_cpu),
         .RegWr (mem_wb_RegWr),      // 最终写回使能
         .Rw    (mem_wb_rd),         // 最终写回寄存器号
         .busW  (wb_write_data),     // 最终写回数据
-
+        .data_out   (wb_data_out),
         .Ra    (id_rs1),            // 读地址 1
         .Rb    (id_rs2),            // 读地址 2
 
@@ -264,7 +265,7 @@ module top(
     // =======================================================
     ID_EX my_id_ex(
         .clk              (clk_cpu),
-        .reset            (reset),
+        .reset            (),
         .stall            (stall),
         // 输入（来自 ID 阶段）
         .imm_in           (id_imm),
@@ -355,7 +356,7 @@ module top(
     // =======================================================
     EX_MEM my_ex_mem(
         .clk                 (clk_cpu),
-        .reset               (reset),
+        .reset               (),
 
         // 输入（来自 EX 阶段）
         .alu_out_in          (ex_alu_out),
@@ -390,7 +391,7 @@ module top(
     wire [2:0] ram_branch;
     Ram my_ram(
         .clk          (clk_cpu),
-        .reset        (reset),
+        .reset        (),
 
         .Addr_byte    (ex_mem_alu_out),    // 访存地址（字节地址）
         .MemOp        (ex_mem_MemOp),      // 访存类型
@@ -422,7 +423,7 @@ module top(
     // =======================================================
     MEM_WB my_mem_wb(
         .clk              (clk_cpu),
-        .reset            (reset),
+        .reset            (),
 
         .mw_mem_data_in   (mem_mem_data),      // MEM 阶段的“内存读数据”
         .mw_alu_out_in    (mem_alu_out),       // MEM 阶段的“ALU 结果”
@@ -468,40 +469,41 @@ module top(
             //pc发射指令需要一拍
             $display("PC发射指令PC=0x%h ", pc_current);
             //取指还需要一拍
-            $display("取指instr=0x%h jump=%b target=0x%h",instr, ex_jump_en, ex_branch_target);
+            $display("取指流出 instr=0x%h，指令地址=0x%h",instr, instr_mem_pc_addr);
             // ID 阶段
-            $display("进入 ID 阶段：rs1=R%0d, rs2=R%0d, rd=R%0d, imm=0x%h",
-                     id_rs1, id_rs2, id_rd, id_imm);
+            $display("IF_ID 模块流出：指令为0x%h，指令地址为0x%h， rs1=R%0d, rs2=R%0d, rd=R%0d, imm=0x%h",
+                        if_id_instr, if_id_pc, id_rs1, id_rs2, id_rd, id_imm);
             $display("ID 译码结果：RegWr=%b, MemOp=0x%0h, MemWr=%b, MemRd=%b, MemtoReg=%b, ALUBsrc=%b, branch=0x%0h",
                      id_RegWr, id_MemOp, id_MemWr, id_MemRd, id_MemtoReg, id_ALUBsrc, id_branch);
 
             // EX 阶段
-            $display("进入 EX 阶段：ALUctr=0x%0h, A=0x%h, B=0x%h, ALUout=0x%h, zero=%b, less=%b",
-                     id_ex_ALUctr, id_ex_busA, ex_alu_in2, ex_alu_out, ex_zero, ex_less);
-            $display("EX 分支：branch=0x%0h, pc_ex=0x%h, imm=0x%h",
-                     id_ex_branch, id_ex_pc, id_ex_imm);
+            $display("ID_EX 阶段流出：指令地址为0x%h，ALUctr=0x%0h, A=0x%h, B=0x%h, ALUout=0x%h, zero=%b, less=%b",
+                     id_ex_pc,id_ex_ALUctr, id_ex_busA, ex_alu_in2, ex_alu_out, ex_zero, ex_less);
+            $display("ALU 分支：srcA=0x%h, srcB=0x%h, branch=0x%0h",
+                     id_ex_busA, id_ex_busB, id_ex_branch);
+            $display("Branch分支： jump=%b target=0x%h",ex_jump_en, ex_branch_target);
+
 
             // MEM 阶段
-            $display("进入 MEM 阶段：Addr_byte=0x%h, 写数据=0x%h, 读数据=0x%h, Wr_en=%b, Rd_en=%b",
-                     ex_mem_alu_out, ex_mem_rs2_val, mem_mem_data, ex_mem_MemWr, ex_mem_MemRd);
+            $display("EX_MEM 阶段流出：指令地址为0x%h，Addr_byte=0x%h, 写数据=0x%h, 读数据=0x%h, Wr_en=%b, Rd_en=%b",
+                        ex_mem_pc, ex_mem_alu_out, ex_mem_rs2_val, mem_mem_data, ex_mem_MemWr, ex_mem_MemRd);
             //ram访存需要一拍
-            $display("MEM 控制信号：RegWr=%b, MemtoReg=%b",
-                     mem_RegWr, mem_MemtoReg);
+            $display("ram模块流出：指令地址为0x%h，RegWr=%b, MemtoReg=%b",
+                        mem_pc, mem_RegWr, mem_MemtoReg);
             // WB 阶段
-            $display("进入 WB 阶段：写回 R%0d, 写回数据=0x%h, RegWr=%b, MemtoReg=%b, branch=0x%0h",
-                     mem_wb_rd, wb_write_data, mem_wb_RegWr, mem_wb_MemtoReg, mem_wb_branch);
+            $display("WB 阶段流出：指令地址为0x%h，写回 R%0d, 写回数据=0x%h, RegWr=%b, MemtoReg=%b, branch=0x%0h",
+                        mem_wb_pc, mem_wb_rd, wb_write_data, mem_wb_RegWr, mem_wb_MemtoReg, mem_wb_branch);
             //实际写回还需要一拍
-            $display("实际写回 R%0d, 写回数据=0x%h",
-                     mem_wb_rd, wb_write_data);
+            $display("寄存器实际写完的数据 0x%h",wb_data_out);
 
-            $display("a0=0x%h", reg_a0);
+            //$display("a0=0x%h", reg_a0);
 
             // 内存关键地址观察：0x80000020 ~ 0x80000023
-            //$display("内存状态：0x20=0x%02h, 0x21=0x%02h, 0x22=0x%02h, 0x23=0x%02h",
-            //         8'( pmem_read(32'h80000020)        & 32'hFF),
-            //         8'((pmem_read(32'h80000020) >> 8)  & 32'hFF),
-            //         8'((pmem_read(32'h80000020) >> 16) & 32'hFF),
-            //         8'((pmem_read(32'h80000020) >> 24) & 32'hFF));
+            // $display("内存状态：0x800513d8=0x%02h, 0x800513d9=0x%02h, 0x800513da=0x%02h, 0x800513db=0x%02h",
+            //          8'( pmem_read(32'h800513d8)        & 32'hFF),
+            //          8'((pmem_read(32'h800513d8) >> 8)  & 32'hFF),
+            //          8'((pmem_read(32'h800513d8) >> 16) & 32'hFF),
+            //          8'((pmem_read(32'h800513d8) >> 24) & 32'hFF));
         end
     end
 

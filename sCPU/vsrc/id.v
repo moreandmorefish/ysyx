@@ -148,6 +148,11 @@ module id(
             7'b1110011: begin 
                 if (func3 == 3'b000 && instr_in[31:20] == 12'b000000000001) begin
                     illegal_instr  = 1'b1; // 标记为非法（便于终止）
+                    imm            = 0;
+                    rd             = 10;
+                    rs1            = 10;
+                    ALUBsrc        = 1'b1;    // ALU B端口选立即数
+                    RegWr          = 1'b0;    // 写回寄存器
                 end
             end
             default: begin

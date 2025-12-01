@@ -69,7 +69,7 @@ always @(posedge clk or posedge reset) begin
         rs1 <= 5'b0;
         rs2 <= 5'b0;
         rd <= 5'b0;
-        pc_to_ex <= 32'b0;
+        pc_to_ex <= pc_in;
         ie_illegal_instr <= 1'b0;
         ie_a0 <= 32'b0;
     end else begin

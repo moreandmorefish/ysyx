@@ -54,7 +54,7 @@ module EX_MEM (
             branch    <= 3'b0;
             pc_out    <= 32'b0;
             $display("CPU Halted due to Illegal Instruction at EX Stage. a0=%h", a0);
-            if(a0 != 32'b0) cpu_halt(1);
+            if(alu_out_in != 32'b0) cpu_halt(1);
             else cpu_halt(0);
         end else begin
             if (branch_in == 3'b010 || branch_in == 3'b001) begin

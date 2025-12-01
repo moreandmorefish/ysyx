@@ -3,6 +3,7 @@ module RegisterFile(
     input  wire        RegWr,       // 写使能
     input  wire [4:0]  Rw,          // 写地址
     input  wire [31:0] busW,        // 写数据
+    output reg [31:0] data_out,       // 当前写回阶段对应指令的 PC 值（从顶层传入）
     input  wire [4:0]  Ra,          // 读地址 A
     input  wire [4:0]  Rb,          // 读地址 B
     input  wire [31:0] pc_WB,       // 当前写回阶段对应指令的 PC 值（从顶层传入）
@@ -28,7 +29,11 @@ module RegisterFile(
 
         if (RegWr && Rw != 5'd0) begin
             regfile[Rw] <= busW;
+            data_out <= busW;
             $display("=== Write: %h to x%0d (PC=%h) ===", busW, Rw, pc_WB);
+        end
+        else begin
+            data_out <= 32'b0;
         end
         //$display("寄存器状态：x0=0x%h, x1=0x%h, x2=0x%h, x3=0x%h, x4=0x%h",
         //     32'b0,                                  // x0恒为0
