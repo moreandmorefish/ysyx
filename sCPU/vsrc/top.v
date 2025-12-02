@@ -80,6 +80,7 @@ module top(
     // =======================================================
     // EX 阶段内部信号
     // =======================================================
+    wire [31:0] ex_alu_in1;       // 送入 ALU 的第一操作数（来自 rs1 或 pc）
     wire [31:0] ex_alu_in2;       // 送入 ALU 的第二操作数（来自 rs2 或 imm）
     wire [31:0] ex_alu_out;       // ALU 计算结果
 
@@ -312,13 +313,14 @@ module top(
     // EX 阶段
     // =======================================================
     // ALU 第二操作数选择：来自 rs2（id_ex_busB）或 imm（id_ex_imm）
+    assign ex_alu_in1 = id_ex_branch == 3'b011 ? id_ex_pc : id_ex_busA; // auipc 指令特殊处理
     assign ex_alu_in2 = id_ex_ALUBsrc ? id_ex_imm : id_ex_busB;
 
     // ---------------------------
     // ALU：算术逻辑单元
     // ---------------------------
     ALU my_alu(
-        .A       (id_ex_busA),     // 来自寄存器堆/ID_EX 的第一个操作数
+        .A       (ex_alu_in1),     // 来自寄存器堆/ID_EX 的第一个操作数
         .B       (ex_alu_in2),     // 第二操作数（寄存器或立即数）
         .ALUctr  (id_ex_ALUctr),   // 控制信号
         .less    (ex_less),

@@ -8,12 +8,11 @@ module RegisterFile(
     input  wire [4:0]  Rb,          // 读地址 B
     input  wire [31:0] pc_WB,       // 当前写回阶段对应指令的 PC 值（从顶层传入）
     output wire [31:0] busA,        // 读数据 A
-    output wire [31:0] busB,         // 读数据 B
+    output wire [31:0] busB,         // 读数据 B 
     output wire [31:0] a0        // 读数据 A0 (for test
 );
 
     reg [31:0] regfile [0:31];
-    integer cycle_count = 0;
 
     // 监测输入信号：每个时钟周期打印 RegWr、Rw、busW、pc_WB 的值
     // always @(posedge clk) begin
@@ -25,7 +24,6 @@ module RegisterFile(
     // 同步写：WB 阶段（在 posedge clk）
     // ---------------------------
     always @(posedge clk) begin
-        cycle_count <= cycle_count + 1;  // 周期计数
 
         if (RegWr && Rw != 5'd0) begin
             regfile[Rw] <= busW;
