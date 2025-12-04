@@ -5,21 +5,27 @@ module instr_mem(
     input         flush,
     input         stall,
     output reg [31:0] pc_addr,
-    output reg [31:0] instr
+    output reg [31:0] instr,
+    input instr_valid_in,
+    output reg instr_valid
 );
     // 1. PC 直接透传 (组合逻辑)
     // 2. 指令读取改为组合逻辑 (去掉 posedge clk)
     always @(posedge clk) begin
         if (flush) begin
             instr <= 32'h00000013;
+            pc_addr <= pc_addr;
+            instr_valid <= 1'b0;
         end 
         else if(stall) begin
             instr <= instr; // 保持不变
             pc_addr <= pc_addr; // 保持不变
+            instr_valid <= 1'b1;
         end
         else begin
             instr <= pmem_read(pc); 
             pc_addr <= pc;
+            instr_valid <= instr_valid_in;
         end
     end
 endmodule

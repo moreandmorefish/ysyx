@@ -26,7 +26,9 @@ module EX_MEM (
     output reg [2:0]  branch,
     output reg [31:0] pc_out,
     input [31:0] a0,
-    input em_illegal_instr_in
+    input em_illegal_instr_in,
+    input instr_valid_in,
+    output reg instr_valid
 );
     import "DPI-C" function void cpu_halt(input code);
     always @(posedge clk or posedge reset) begin
@@ -41,6 +43,7 @@ module EX_MEM (
             rd        <= 5'b0;
             branch    <= 3'b0;
             pc_out    <= 32'b0;
+            instr_valid <= 1'b0;
         end
         else if(em_illegal_instr_in) begin
             alu_out   <= 32'b0;
@@ -53,6 +56,7 @@ module EX_MEM (
             rd        <= 5'b0;
             branch    <= 3'b0;
             pc_out    <= 32'b0;
+            instr_valid <= 1'b0;
             $display("CPU Halted due to Illegal Instruction at EX Stage. a0=%h  pc=%h", a0, pc_in);
             if(alu_out_in != 32'b0) cpu_halt(1);
             else cpu_halt(0);
@@ -71,6 +75,7 @@ module EX_MEM (
             rd        <= rd_in;
             branch    <= branch_in;
             pc_out    <= pc_in;
+            instr_valid <= instr_valid_in;
         end
     end
 

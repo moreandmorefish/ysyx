@@ -30,7 +30,9 @@ module ID_EX(
     input ie_legal_instr_in,
     output reg ie_illegal_instr,  // 输出：非法指令标志
     input [31:0] ie_a0_in,
-    output reg [31:0] ie_a0
+    output reg [31:0] ie_a0,
+    input instr_valid_in,
+    output reg instr_valid
 );
 
 always @(posedge clk or posedge reset) begin
@@ -53,6 +55,7 @@ always @(posedge clk or posedge reset) begin
         pc_to_ex <= 32'b0;
         ie_illegal_instr <= 1'b0;
         ie_a0 <= 32'b0;
+        instr_valid <= 1'b0;
     end else if (flush | stall) begin
         // 冲刷流水线：清零所有控制信号和数据信号（避免气泡）
         imm <= 32'b0;
@@ -69,9 +72,10 @@ always @(posedge clk or posedge reset) begin
         rs1 <= 5'b0;
         rs2 <= 5'b0;
         rd <= 5'b0;
-        pc_to_ex <= pc_in;
+        pc_to_ex <= pc_to_ex;  // 冲刷时PC置0，暂停时保持不变
         ie_illegal_instr <= 1'b0;
         ie_a0 <= 32'b0;
+        instr_valid <= 1'b0;
     end else begin
         // 正常传递：输入→输出
         imm <= imm_in;
@@ -91,6 +95,7 @@ always @(posedge clk or posedge reset) begin
         pc_to_ex <= pc_in;
         ie_illegal_instr <= ie_legal_instr_in;
         ie_a0 <= ie_a0_in;
+        instr_valid <= instr_valid_in;
     end
 end
 

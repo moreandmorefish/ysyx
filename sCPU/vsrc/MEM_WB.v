@@ -18,7 +18,9 @@ module MEM_WB (
     output reg        mw_memtoreg_out,
     output reg [31:0] mw_pc_out,      // ✅ 新增：写回阶段的 PC 值
     input [2:0] mw_branch,
-    output reg [2:0] mw_branch_out
+    output reg [2:0] mw_branch_out,
+    input instr_valid_in,
+    output reg instr_valid
 );
 
     always @(posedge clk or posedge reset) begin
@@ -30,6 +32,7 @@ module MEM_WB (
             mw_memtoreg_out  <= 1'b0;
             mw_pc_out        <= 32'b0;  // ✅ 初始化 PC
             mw_branch_out    <= 3'b0;
+            instr_valid      <= 1'b0;
         end else begin
             mw_mem_data_out  <= mw_mem_data_in;
             mw_alu_out_out   <= mw_alu_out_in;
@@ -38,6 +41,7 @@ module MEM_WB (
             mw_memtoreg_out  <= mw_memtoreg_in;
             mw_pc_out        <= mw_pc_in;  // ✅ 正常传递 PC
             mw_branch_out    <= mw_branch;
+            instr_valid      <= instr_valid_in;
         end
     end
     //always @(posedge clk) begin
