@@ -26,6 +26,14 @@ image: image-dep
 	@$(OBJCOPY) -S --set-section-flags .bss=alloc,contents -O binary $(IMAGE).elf $(IMAGE).bin
 
 run: insert-arg
-	echo "TODO: add command here to run simulation"
+	@echo "========================================"
+	@echo "🔧 启动 NPC 模拟器（外部镜像模式）"
+	@echo "📁 本地生成的镜像：$(IMAGE).bin"
+	@echo "📥 嵌入参数：$(mainargs)"
+	@echo "🎯 目标 NPC 目录：/home/water123/pa/ysyx-workbench/nvboard/sCPU"
+	@echo "========================================"
+	# 核心命令：进入 NPC 目录，执行 make run，传递 bin=镜像绝对路径
+	cd /home/water123/pa/ysyx-workbench/nvboard/sCPU && \
+	make run BIN=$(abspath $(IMAGE).bin)
 
 .PHONY: insert-arg
