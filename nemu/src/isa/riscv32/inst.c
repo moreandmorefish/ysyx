@@ -22,33 +22,45 @@
 #define Mr vaddr_read
 #define Mw vaddr_write
 
-//#define CONFIG_FTRACE 1
-//void print_ftrace(uint32_t inst_addr, uint32_t func_addr, int is_enter);
-//
-//static void ftrace_jal(uint32_t inst_addr, uint32_t func_addr, int rd) {
-//#ifdef CONFIG_FTRACE
-//	if (rd == 1) {
-//		print_ftrace(inst_addr, func_addr, 1);
-//	}
-//#endif
-//}
-//
-//static void ftrace_jalr(uint32_t inst_addr, uint32_t func_addr, int rd, int rs1, int imm) {
-//#ifdef CONFIG_FTRACE
-//	if (rd == 0 && rs1 == 1 && imm == 0) {
-//		print_ftrace(inst_addr, inst_addr, 0);
-//	}
-//	else if (rd == 1) {
-//		print_ftrace(inst_addr, func_addr, 1);
-//	}
-//#endif
-//}
+#define CONFIG_FTRACE 1
+void print_ftrace(uint32_t inst_addr, uint32_t func_addr, int is_enter);
+
+static void ftrace_jal(uint32_t inst_addr, uint32_t func_addr, int rd) {
+#ifdef CONFIG_FTRACE
+	if (rd == 1) {
+		print_ftrace(inst_addr, func_addr, 1);
+	}
+#endif
+}
+
+static void ftrace_jalr(uint32_t inst_addr, uint32_t func_addr, int rd, int rs1, int imm) {
+#ifdef CONFIG_FTRACE
+	if (rd == 0 && rs1 == 1 && imm == 0) {
+		print_ftrace(inst_addr, inst_addr, 0);
+	}
+	else if (rd == 1) {
+		print_ftrace(inst_addr, func_addr, 1);
+	}
+#endif
+}
 
 enum {
   TYPE_I, TYPE_U, TYPE_S,
   TYPE_J,TYPE_B,TYPE_R,
   TYPE_N, // none
 };
+
+static vaddr_t *csr_register(word_t imm) {
+  switch (imm)
+  {
+  case 0x341: return &(cpu.csr.mepc);
+  case 0x342: return &(cpu.csr.mcause);
+  case 0x300: return &(cpu.csr.mstatus);
+  case 0x305: return &(cpu.csr.mtvec);
+  default: panic("Unknown csr");
+  }
+}
+
 
 #define src1R() do { *src1 = R(rs1); } while (0)
 #define src2R() do { *src2 = R(rs2); } while (0)
@@ -60,6 +72,13 @@ enum {
 #define immB() do { *imm = (SEXT(BITS(i, 31, 31), 1) << 12) | (BITS(i, 7, 7) << 11) \
     | (BITS(i, 30, 25) << 5) | (BITS(i, 11, 8) << 1); } while(0)
 
+
+#define ECALL(pc) ({ \
+  bool success; \
+  word_t a7_val = isa_reg_str2val("a7", &success); \
+  isa_raise_intr(a7_val, pc);  \
+})
+#define CSR(i) *csr_register(i)
 
 static void decode_operand(Decode *s, int *rd, word_t *src1, word_t *src2, word_t *imm, int type) {
   uint32_t i = s->isa.inst;
@@ -177,6 +196,10 @@ INSTPAT_START();
   INSTPAT("??????? ????? ????? 010 ????? 00100 11", slti   , I, R(rd) = ((sword_t)src1 < (sword_t)imm) ? 1 : 0);
   INSTPAT("0100000 ????? ????? 101 ????? 01100 11", sra    , R, R(rd) = (sword_t)src1 >> (src2 & 0x1f));
   INSTPAT("0000000 ????? ????? 101 ????? 01100 11", srl    , R, R(rd) = src1 >> (src2 & 0x1f));
+  INSTPAT("??????? ????? ????? 001 ????? 11100 11", csrrw  , I, R(rd) = CSR(imm); CSR(imm) = src1);
+  INSTPAT("??????? ????? ????? 010 ????? 11100 11", csrrs  , I, R(rd) = CSR(imm); CSR(imm) |= src1);
+  INSTPAT("0000000 00000 00000 000 00000 11100 11", ecall  , I, ECALL(s->pc));
+  INSTPAT("0011000 00010 00000 000 00000 11100 11", mret   , R, s->dnpc = CSR(0x341) + 4);
 
 INSTPAT("0000000 00001 00000 000 00000 11100 11", ebreak , N, NEMUTRAP(s->pc, R(10))); // R(10) is $a0
 INSTPAT("??????? ????? ???? ??? ????? ????? ??", inv     , N, INV(s->pc));
