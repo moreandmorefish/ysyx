@@ -11,5 +11,5 @@
 #include <klib.h>
 #include <klib-macros.h>
 #include <debug.h>
-
+#define HAS_CTE 1
 #endif

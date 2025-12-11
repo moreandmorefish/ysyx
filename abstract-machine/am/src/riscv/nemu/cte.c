@@ -6,10 +6,18 @@ static Context* (*user_handler)(Event, Context*) = NULL;
 
 Context* __am_irq_handle(Context *c) {
   printf("c->mcause is %d\n", c->mcause);
+  printf("a7 is %x\n", c->gpr[17]);
   if (user_handler) {
     Event ev = {0};
     switch (c->mcause) {
-      case -1: ev.event = EVENT_YIELD; break;
+      case 11: 
+        if (c->gpr[17] == -1) 
+        {  // a7=-1 → yield自陷
+            ev.event = EVENT_YIELD;
+        } else {  // a7=其他值 → 系统调用
+            ev.event = EVENT_SYSCALL;
+        }
+        break;
       default: ev.event = EVENT_ERROR; break;
     }
 

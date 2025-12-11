@@ -73,11 +73,15 @@ static vaddr_t *csr_register(word_t imm) {
     | (BITS(i, 30, 25) << 5) | (BITS(i, 11, 8) << 1); } while(0)
 
 
+/* #define ECALL(pc) ({ \
+//   bool success; \
+//   word_t a7_val = isa_reg_str2val("a7", &success); \
+//   s->dnpc = isa_raise_intr(a7_val, pc);  \
+// })*/
 #define ECALL(pc) ({ \
-  bool success; \
-  word_t a7_val = isa_reg_str2val("a7", &success); \
-  s->dnpc = isa_raise_intr(a7_val, pc);  \
+  s->dnpc = isa_raise_intr(11, pc);  \
 })
+
 #define CSR(i) *csr_register(i)
 
 static void decode_operand(Decode *s, int *rd, word_t *src1, word_t *src2, word_t *imm, int type) {
