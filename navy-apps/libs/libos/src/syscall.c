@@ -60,18 +60,7 @@ void _exit(int status) {
   while (1);
 }
 
-int _open(const char *path, int flags, mode_t mode) {
-  _exit(SYS_open);
-  return 0;
-}
 
-int _write(int fd, void *buf, size_t count) {
-  // 原来的代码是: _exit(SYS_write); return 0;  <-- 删除这行
-  
-  // 修改为调用通用系统调用接口:
-  // 参数对应关系: type=SYS_write, a0=fd, a1=buf, a2=count
-  return _syscall_(SYS_write, fd, (intptr_t)buf, count);
-}
 
 // navy-apps/libs/libos/src/syscall.c
 
@@ -98,23 +87,34 @@ void *_sbrk(intptr_t increment) {
   return (void *)-1; // 失败
 }
 
+
+int _open(const char *path, int flags, mode_t mode) {
+  // 调用 SYS_open, 传入路径、flags、mode
+  return _syscall_(SYS_open, (intptr_t)path, flags, mode);
+}
+
+int _write(int fd, void *buf, size_t count) {
+  // 原来的代码是: _exit(SYS_write); return 0;  <-- 删除这行
+  
+  // 修改为调用通用系统调用接口:
+  // 参数对应关系: type=SYS_write, a0=fd, a1=buf, a2=count
+  return _syscall_(SYS_write, fd, (intptr_t)buf, count);
+}
+
 int _read(int fd, void *buf, size_t count) {
-  _exit(SYS_read);
-  return 0;
+  return _syscall_(SYS_read, fd, (intptr_t)buf, count);
 }
 
 int _close(int fd) {
-  _exit(SYS_close);
-  return 0;
+  return _syscall_(SYS_close, fd, 0, 0);
 }
 
 off_t _lseek(int fd, off_t offset, int whence) {
-  _exit(SYS_lseek);
-  return 0;
+  return _syscall_(SYS_lseek, fd, offset, whence);
 }
 
 int _gettimeofday(struct timeval *tv, struct timezone *tz) {
-  _exit(SYS_gettimeofday);
+  return _syscall_(SYS_gettimeofday, (intptr_t)tv, (intptr_t)tz, 0);
   return 0;
 }
 

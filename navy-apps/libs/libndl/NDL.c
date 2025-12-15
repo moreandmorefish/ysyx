@@ -3,17 +3,38 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/time.h>
+#include <fcntl.h>
 
 static int evtdev = -1;
 static int fbdev = -1;
 static int screen_w = 0, screen_h = 0;
 
+static int evt_fd = -1;
+
 uint32_t NDL_GetTicks() {
-  return 0;
+  struct timeval tv;
+  // 调用 Newlib 的 gettimeofday，它会发起 SYS_gettimeofday 系统调用
+  gettimeofday(&tv, NULL);
+  
+  // 转换：秒*1000 + 微秒/1000 = 毫秒
+  return tv.tv_sec * 1000 + tv.tv_usec / 1000;
 }
 
 int NDL_PollEvent(char *buf, int len) {
-  return 0;
+  // 1. 第一次调用时打开文件
+  if (evt_fd == -1) {
+    evt_fd = open("/dev/events", O_RDONLY);
+    if (evt_fd == -1) return 0; // 打开失败
+  }
+
+  // 2. 尝试读取
+  // 注意：因为 device.c 里 events_read 在没按键时返回 0
+  // 所以这里如果读不到数据，read 会返回 0
+  int ret = read(evt_fd, buf, len);
+
+  // 3. 返回 1 表示读到了事件，0 表示没读到
+  return (ret > 0) ? 1 : 0;
 }
 
 void NDL_OpenCanvas(int *w, int *h) {

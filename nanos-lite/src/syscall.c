@@ -1,5 +1,6 @@
 #include <common.h>
 #include "syscall.h"
+#include "fs.h"
 
 char *syscall_names[] = {
   "SYS_exit",
@@ -24,6 +25,36 @@ char *syscall_names[] = {
   "SYS_gettimeofday"
 };
 
+// --- [新增] 手动定义 timeval 结构体 ---
+// 这是为了匹配 Newlib 中定义的 struct timeval 内存布局
+struct timeval {
+  long tv_sec;     /* seconds */
+  long tv_usec;    /* microseconds */
+};
+
+struct timezone {
+  int tz_minuteswest;     /* minutes west of Greenwich */
+  int tz_dsttime;         /* type of DST correction */
+};
+
+int sys_gettimeofday(struct timeval *tv, struct timezone *tz) {
+  // 1. 定义变量
+  AM_TIMER_UPTIME_T uptime;
+  
+  // 2. 传入地址
+  ioe_read(AM_TIMER_UPTIME, &uptime);
+  
+  // 3. 从结构体中取值
+  uint64_t us = uptime.us;
+  
+  if (tv != NULL) {
+    tv->tv_sec = us / 1000000;
+    tv->tv_usec = us % 1000000;
+  }
+  return 0;
+}
+// ------------------------------------
+
 size_t sys_write(int fd, const void *buf, size_t count) {
   // fd=1: stdout, fd=2: stderr
   // 目前我们只支持输出到串口，所以只处理这两个 fd
@@ -46,42 +77,58 @@ void do_syscall(Context *c) {
   a[2] = c->GPR3; // arg 2
   a[3] = c->GPR4; // arg 3
 
-  // --- strace 实现开始 ---
-  
-  // 1. 获取系统调用名字
   char *name = "Unknown";
-  // 检查是否越界，防止访问数组之外的内存
   if (a[0] >= 0 && a[0] < sizeof(syscall_names) / sizeof(syscall_names[0])) {
       name = syscall_names[a[0]];
   }
 
-  // 2. 打印 trace 信息 (推荐使用 Log 宏，或者 printf)
-  // 格式参考: [strace] SYS_name (ID) args...
-  Log("strace: %s (ID=%d) args(0x%x, 0x%x, 0x%x)", 
-      name, a[0], a[1], a[2], a[3]);
-
-  // --- strace 实现结束 ---
+  Log("strace: %s (ID=%d) args(0x%x, 0x%x, 0x%x)", name, a[0], a[1], a[2], a[3]);
 
   switch (a[0]) {
-    // ... 你的 switch case 代码 ...
-    case SYS_exit: //0
+    case SYS_exit:
       halt(a[1]);
       break;
-    case SYS_yield: //1
+
+    case SYS_yield:
       yield();
       c->GPRx = 0;
       break;
-    case SYS_write:
-      // 调用辅助函数，并将返回值写入 GPRx (a0)
-      // 注意参数转换：a[1]是fd, a[2]是buf指针, a[3]是长度
-      c->GPRx = sys_write((int)a[1], (void *)a[2], (size_t)a[3]); 
+
+    case SYS_open:
+      // fs_open(filename, flags, mode)
+      c->GPRx = fs_open((const char *)a[1], a[2], a[3]);
       break;
+
+    case SYS_read:
+      // fs_read(fd, buf, len)
+      c->GPRx = fs_read(a[1], (void *)a[2], a[3]);
+      break;
+
+    case SYS_write:
+      // fs_write(fd, buf, len)
+      // 注意：串口输出已经在 fs.c 的 fs_write 中处理了，这里只需透传
+      c->GPRx = fs_write(a[1], (void *)a[2], a[3]);
+      break;
+
+    case SYS_close:
+      // fs_close(fd)
+      c->GPRx = fs_close(a[1]);
+      break;
+
+    case SYS_lseek:
+      // fs_lseek(fd, offset, whence)
+      c->GPRx = fs_lseek(a[1], a[2], a[3]);
+      break;
+
     case SYS_brk:
-      // a[1] 是新的 program break 位置
-      // 目前我们总是返回 0，表示成功
-      // (真正的 OS 需要记录这个值并检查是否越界，但现在先这样)
       c->GPRx = 0; 
       break;
+
+    case SYS_gettimeofday:
+      // 强转指针类型
+      c->GPRx = sys_gettimeofday((struct timeval *)a[1], (struct timezone *)a[2]);
+      break;
+
     default: 
       panic("Unhandled syscall ID = %d", a[0]);
   }
