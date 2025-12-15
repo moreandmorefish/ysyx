@@ -24,6 +24,21 @@ char *syscall_names[] = {
   "SYS_gettimeofday"
 };
 
+size_t sys_write(int fd, const void *buf, size_t count) {
+  // fd=1: stdout, fd=2: stderr
+  // 目前我们只支持输出到串口，所以只处理这两个 fd
+  if (fd == 1 || fd == 2) {
+    const char *p = (const char *)buf;
+    for (int i = 0; i < count; i++) {
+      putch(p[i]); // 使用 AM 提供的 putch 输出一个字符
+    }
+    return count; // 返回实际写入的字节数
+  }
+  
+  // 目前不支持其他文件描述符，暂时忽略
+  return -1; 
+}
+
 void do_syscall(Context *c) {
   uintptr_t a[4];
   a[0] = c->GPR1; // syscall ID
@@ -55,6 +70,17 @@ void do_syscall(Context *c) {
     case SYS_yield: //1
       yield();
       c->GPRx = 0;
+      break;
+    case SYS_write:
+      // 调用辅助函数，并将返回值写入 GPRx (a0)
+      // 注意参数转换：a[1]是fd, a[2]是buf指针, a[3]是长度
+      c->GPRx = sys_write((int)a[1], (void *)a[2], (size_t)a[3]); 
+      break;
+    case SYS_brk:
+      // a[1] 是新的 program break 位置
+      // 目前我们总是返回 0，表示成功
+      // (真正的 OS 需要记录这个值并检查是否越界，但现在先这样)
+      c->GPRx = 0; 
       break;
     default: 
       panic("Unhandled syscall ID = %d", a[0]);

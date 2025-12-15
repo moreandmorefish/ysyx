@@ -66,12 +66,36 @@ int _open(const char *path, int flags, mode_t mode) {
 }
 
 int _write(int fd, void *buf, size_t count) {
-  _exit(SYS_write);
-  return 0;
+  // 原来的代码是: _exit(SYS_write); return 0;  <-- 删除这行
+  
+  // 修改为调用通用系统调用接口:
+  // 参数对应关系: type=SYS_write, a0=fd, a1=buf, a2=count
+  return _syscall_(SYS_write, fd, (intptr_t)buf, count);
 }
 
+// navy-apps/libs/libos/src/syscall.c
+
+// 声明 _end 符号，这是链接器提供的，指示程序数据段的结束位置
+extern char _end; 
+static void *program_break = NULL;
+
 void *_sbrk(intptr_t increment) {
-  return (void *)-1;
+  // 第一次调用时，初始化 program_break 为 _end 的地址
+  if (program_break == NULL) {
+    program_break = (void *)&_end;
+  }
+
+  void *old_break = program_break;
+  void *new_break = (void *)((char *)program_break + increment);
+
+  // 调用系统调用通知操作系统我们要调整堆大小
+  // 如果操作系统返回 0 (成功)，我们就更新自己的记录
+  if (_syscall_(SYS_brk, (intptr_t)new_break, 0, 0) == 0) {
+    program_break = new_break;
+    return old_break; // 返回调整前的堆顶地址
+  }
+
+  return (void *)-1; // 失败
 }
 
 int _read(int fd, void *buf, size_t count) {
