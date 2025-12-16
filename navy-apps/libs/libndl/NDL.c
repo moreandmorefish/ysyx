@@ -9,6 +9,8 @@
 static int evtdev = -1;
 static int fbdev = -1;
 static int screen_w = 0, screen_h = 0;
+static int canvas_w = 0, canvas_h = 0;
+static int canvas_x = 0, canvas_y = 0; // [新增] 画布起始坐标
 
 static int evt_fd = -1;
 
@@ -38,26 +40,65 @@ int NDL_PollEvent(char *buf, int len) {
 }
 
 void NDL_OpenCanvas(int *w, int *h) {
+  // 1. 获取屏幕大小 (这一步必须最先做，或者保证 screen_w/h 有值)
+  // 虽然 NWM_APP 里可能已经设了，但为了保险，总是去读 dispinfo 也没坏处
+  // 或者你保留原来的逻辑结构，但要把 dispinfo 的读取提到前面
+  
   if (getenv("NWM_APP")) {
     int fbctl = 4;
     fbdev = 5;
     screen_w = *w; screen_h = *h;
     char buf[64];
     int len = sprintf(buf, "%d %d", screen_w, screen_h);
-    // let NWM resize the window and create the frame buffer
     write(fbctl, buf, len);
     while (1) {
-      // 3 = evtdev
       int nread = read(3, buf, sizeof(buf) - 1);
       if (nread <= 0) continue;
       buf[nread] = '\0';
       if (strcmp(buf, "mmap ok") == 0) break;
     }
     close(fbctl);
+  } else {
+    // 非 NWM_APP 环境 (比如现在的 Nanos-lite)
+    // 必须读取 /proc/dispinfo 获取屏幕大小
+    int fd = open("/proc/dispinfo", O_RDONLY);
+    char buf[64];
+    read(fd, buf, sizeof(buf));
+    close(fd);
+    sscanf(buf, "WIDTH:%d\nHEIGHT:%d", &screen_w, &screen_h);
   }
+
+  // 2. 确定画布大小
+  if (*w == 0 && *h == 0) {
+    *w = screen_w;
+    *h = screen_h;
+  }
+  
+  // [关键修复] 更新全局变量 canvas_w 和 canvas_h
+  canvas_w = *w;
+  canvas_h = *h;
+
+  // [关键修复] 计算居中起始坐标 (无论何种环境都要计算)
+  // 如果画布比屏幕大，坐标可能为负，但这在 bmp-test 里不会发生
+  canvas_x = (screen_w - canvas_w) / 2;
+  canvas_y = (screen_h - canvas_h) / 2;
 }
 
 void NDL_DrawRect(uint32_t *pixels, int x, int y, int w, int h) {
+  int fd = open("/dev/fb", O_WRONLY);
+
+  for (int i = 0; i < h; i++) {
+    // [修改] 计算显存偏移量时，加上 canvas_x 和 canvas_y
+    // 实际屏幕坐标 X = canvas_x + x
+    // 实际屏幕坐标 Y = canvas_y + y
+    // 显存 offset = (Y * screen_w + X) * 4
+    int offset = ((canvas_y + y + i) * screen_w + (canvas_x + x)) * 4;
+    
+    lseek(fd, offset, SEEK_SET);
+    write(fd, pixels + i * w, w * 4);
+  }
+
+  close(fd);
 }
 
 void NDL_OpenAudio(int freq, int channels, int samples) {

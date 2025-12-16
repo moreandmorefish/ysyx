@@ -47,12 +47,51 @@ size_t events_read(void *buf, size_t offset, size_t len) {
   return ret;
 }
 
+// 格式输出: "WIDTH:400\nHEIGHT:300"
 size_t dispinfo_read(void *buf, size_t offset, size_t len) {
-  return 0;
+  // 读取 AM 显卡配置
+  AM_GPU_CONFIG_T cfg;
+  ioe_read(AM_GPU_CONFIG, &cfg); // 注意传地址
+  
+  // 格式化屏幕大小信息
+  // 显卡信息是静态的，offset 只有在第一次读取时有用，
+  // 但为了简化，我们假设用户一次读完，或者我们每次都从头写
+  // (严谨的做法是配合 offset，但这里简化处理)
+  int ret = snprintf((char *)buf, len, "WIDTH:%d\nHEIGHT:%d\n", 
+                     cfg.width, cfg.height);
+  return ret;
 }
 
+// nanos-lite/src/device.c
+
 size_t fb_write(const void *buf, size_t offset, size_t len) {
-  return 0;
+  // 1. 获取屏幕宽度 (用于计算坐标)
+  AM_GPU_CONFIG_T cfg;
+  ioe_read(AM_GPU_CONFIG, &cfg);
+  
+  // 2. 转换坐标
+  // 显存中每 4 字节代表一个像素
+  int offset_pixel = offset / 4;
+  int x = offset_pixel % cfg.width;
+  int y = offset_pixel / cfg.width;
+  
+  // 写入的像素数量
+  int len_pixel = len / 4;
+
+  // 3. [修正] 构造绘图结构体
+  // 你的 AM 版本要求通过结构体传递参数
+  AM_GPU_FBDRAW_T ctl;
+  ctl.x = x;
+  ctl.y = y;
+  ctl.pixels = (void *)buf; // 像素数据指针
+  ctl.w = len_pixel;        // 宽度 (写入的像素数)
+  ctl.h = 1;                // 高度 (默认为 1 行)
+  ctl.sync = true;          // 立即同步到屏幕
+
+  // 4. [修正] 传递结构体地址
+  ioe_write(AM_GPU_FBDRAW, &ctl);
+
+  return len;
 }
 
 void init_device() {

@@ -8,6 +8,8 @@ size_t events_read(void *buf, size_t offset, size_t len);
 
 typedef size_t (*ReadFn) (void *buf, size_t offset, size_t len);
 typedef size_t (*WriteFn) (const void *buf, size_t offset, size_t len);
+size_t dispinfo_read(void *buf, size_t offset, size_t len);
+size_t fb_write(const void *buf, size_t offset, size_t len);
 
 typedef struct {
   char *name;
@@ -18,7 +20,7 @@ typedef struct {
   size_t open_offset; // [新增] 添加文件读写偏移量
 } Finfo;
 
-enum {FD_STDIN, FD_STDOUT, FD_STDERR, FD_EVENTS, FD_FB};
+enum {FD_STDIN, FD_STDOUT, FD_STDERR, FD_EVENTS, FD_FB, FD_DISPINFO};
 
 size_t invalid_read(void *buf, size_t offset, size_t len) {
   panic("should not reach here");
@@ -38,7 +40,11 @@ static Finfo file_table[] __attribute__((used)) = {
   // 修改这里：注册 serial_write
   [FD_STDOUT] = {"stdout", 0, 0, invalid_read, serial_write},
   [FD_STDERR] = {"stderr", 0, 0, invalid_read, serial_write},
-  [FD_EVENTS] = {"/dev/events", 0, 0, events_read, invalid_write},
+  [FD_EVENTS]   = {"/dev/events", 0, 0, events_read, invalid_write},
+  // [新增] 显存 /dev/fb
+  [FD_FB]       = {"/dev/fb", 0, 0, invalid_read, fb_write},
+  // [新增] 屏幕信息 /proc/dispinfo
+  [FD_DISPINFO] = {"/proc/dispinfo", 0, 0, dispinfo_read, invalid_write},
 #include "files.h"
 };
 
@@ -46,7 +52,16 @@ static Finfo file_table[] __attribute__((used)) = {
 #define NR_FILES (sizeof(file_table) / sizeof(file_table[0]))
 
 void init_fs() {
-  // TODO: initialize the size of /dev/fb
+  // 1. 读取屏幕宽高
+  AM_GPU_CONFIG_T cfg;
+  ioe_read(AM_GPU_CONFIG, &cfg);
+  
+  // 2. 计算显存大小 = 宽 * 高 * 4字节
+  int fb_size = cfg.width * cfg.height * 4;
+
+  // 3. 修改 file_table 中 /dev/fb 的 size
+  // 找到 /dev/fb 的下标。如果你按照我上面的 enum 顺序，它就是 FD_FB
+  file_table[FD_FB].size = fb_size;
 }
 
 // 1. fs_open: 查找文件并重置偏移量
