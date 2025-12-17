@@ -1,6 +1,7 @@
 #include <common.h>
 #include "syscall.h"
 #include "fs.h"
+#include <proc.h>
 
 char *syscall_names[] = {
   "SYS_exit",
@@ -69,23 +70,26 @@ size_t sys_write(int fd, const void *buf, size_t count) {
   // 目前不支持其他文件描述符，暂时忽略
   return -1; 
 }
-
+//#define STRACE 1
 void do_syscall(Context *c) {
   uintptr_t a[4];
   a[0] = c->GPR1; // syscall ID
   a[1] = c->GPR2; // arg 1
   a[2] = c->GPR3; // arg 2
   a[3] = c->GPR4; // arg 3
+  #if STRACE
+    char *name = "Unknown";
+    if (a[0] >= 0 && a[0] < sizeof(syscall_names) / sizeof(syscall_names[0])) {
+        name = syscall_names[a[0]];
+    }
 
-  char *name = "Unknown";
-  if (a[0] >= 0 && a[0] < sizeof(syscall_names) / sizeof(syscall_names[0])) {
-      name = syscall_names[a[0]];
-  }
-
-  Log("strace: %s (ID=%d) args(0x%x, 0x%x, 0x%x)", name, a[0], a[1], a[2], a[3]);
+    Log("strace: %s (ID=%d) args(0x%x, 0x%x, 0x%x)", name, a[0], a[1], a[2], a[3]);
+  #endif
 
   switch (a[0]) {
     case SYS_exit:
+      naive_uload(NULL, "/bin/menu");
+      c->GPRx = 0;
       halt(a[1]);
       break;
 
@@ -127,6 +131,16 @@ void do_syscall(Context *c) {
     case SYS_gettimeofday:
       // 强转指针类型
       c->GPRx = sys_gettimeofday((struct timeval *)a[1], (struct timezone *)a[2]);
+      break;
+    case SYS_execve:
+      if (a[1] != 0) {
+        // [关键操作] 加载新程序，覆盖当前进程
+        // 注意：execve 成功后是不返回的，因为当前进程的代码都被覆盖了
+        // 它会直接跳转到新程序的 entry 执行
+        naive_uload(NULL, (const char *)a[1]);
+      } else {
+        c->GPRx = -1; // 失败返回 -1
+      }
       break;
 
     default: 

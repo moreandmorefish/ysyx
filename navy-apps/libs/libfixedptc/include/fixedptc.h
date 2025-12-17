@@ -127,37 +127,56 @@ typedef	__uint128_t fixedptud;
 
 /* Multiplies a fixedpt number with an integer, returns the result. */
 static inline fixedpt fixedpt_muli(fixedpt A, int B) {
-	return 0;
+    // A 是定点数 (实际值 * 256)，B 是普通整数
+    // (A/256) * B = (A*B)/256
+    // 直接相乘，小数位保持不变
+    return A * B;
 }
 
 /* Divides a fixedpt number with an integer, returns the result. */
 static inline fixedpt fixedpt_divi(fixedpt A, int B) {
-	return 0;
+    // (A/256) / B = (A/B)/256
+    // 直接相除
+    return A / B;
 }
 
 /* Multiplies two fixedpt numbers, returns the result. */
 static inline fixedpt fixedpt_mul(fixedpt A, fixedpt B) {
-	return 0;
+    // A = val1 * 2^8, B = val2 * 2^8
+    // A * B = val1 * val2 * 2^16
+    // 我们需要结果是 val * 2^8
+    // 所以结果需要右移 8 位 (FIXEDPT_FBITS)
+    // 强制转为 fixedptd (int64) 防止中间结果溢出 32 位
+    return (fixedpt)((fixedptd)A * B >> FIXEDPT_FBITS);
 }
 
 
 /* Divides two fixedpt numbers, returns the result. */
 static inline fixedpt fixedpt_div(fixedpt A, fixedpt B) {
-	return 0;
+    // A / B = (val1 * 2^8) / (val2 * 2^8) = val1 / val2 (变成了普通整数)
+    // 我们需要结果是定点数，即 (val1/val2) * 2^8
+    // 所以被除数要先左移 8 位
+    return (fixedpt)(((fixedptd)A << FIXEDPT_FBITS) / B);
 }
 
 static inline fixedpt fixedpt_abs(fixedpt A) {
-	return 0;
+    return (A < 0 ? -A : A);
 }
 
 static inline fixedpt fixedpt_floor(fixedpt A) {
-	return 0;
+    // 向下取整：直接把低 8 位（小数部分）抹零
+    // 例如 1.5 (0x180) -> 1.0 (0x100)
+    // 负数补码特性：-1.5 (..1110 1000) 抹零后变成 -2.0 (..1110 0000)，符合 floor 定义
+    return A & (~FIXEDPT_FMASK); // FIXEDPT_FMASK 是 0xFF
 }
 
 static inline fixedpt fixedpt_ceil(fixedpt A) {
-	return 0;
+    // 向上取整
+    // 如果小数部分是 0，直接返回 A
+    if ((A & FIXEDPT_FMASK) == 0) return A;
+    // 否则，先 floor 再加 1.0 (FIXEDPT_ONE)
+    return (A & (~FIXEDPT_FMASK)) + FIXEDPT_ONE;
 }
-
 /*
  * Note: adding and substracting fixedpt numbers can be done by using
  * the regular integer operators + and -.

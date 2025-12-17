@@ -27,6 +27,22 @@ static int is_batch_mode = false;
 void init_regex();
 void init_wp_pool();
 
+// [新增] 声明外部函数
+extern void difftest_detach();
+extern void difftest_attach();
+
+// [新增] 实现 attach 命令处理函数
+static int cmd_attach(char *args) {
+  difftest_attach();
+  return 0;
+}
+
+// [新增] 实现 detach 命令处理函数
+static int cmd_detach(char *args) {
+  difftest_detach();
+  return 0;
+}
+
 /* We use the `readline' library to provide more flexibility to read from stdin. */
 static char* rl_gets() {
   static char *line_read = NULL;
@@ -236,6 +252,10 @@ static struct {
   {"p", "Usage: p EXPR. Calculate the expression, e.g. p $eax + 1", cmd_p },
   { "w", "Usage: w EXPR. Watch for the variation of the result of EXPR, pause at variation point", cmd_w },
   { "d", "Usage: d N. Delete watchpoint of wp.NO=N", cmd_d },
+
+  /* [新增] 注册 detach 和 attach 命令 */
+  { "detach", "Disable DiffTest to run at full speed", cmd_detach },
+  { "attach", "Enable DiffTest and sync state from NEMU to REF", cmd_attach },
 
 };
 

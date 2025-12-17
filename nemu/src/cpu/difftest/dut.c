@@ -30,6 +30,27 @@ void (*ref_difftest_raise_intr)(uint64_t NO) = NULL;
 
 static bool is_skip_ref = false;
 static int skip_dut_nr_inst = 0;
+// [新增] DiffTest 全局开关，默认开启
+static bool is_difftest_on = true;
+
+// [新增] 关闭 DiffTest
+void difftest_detach() {
+  is_difftest_on = false;
+  Log("Difftest detached. Now running in FULL SPEED.");
+}
+
+// [新增] 开启 DiffTest (关键：必须同步状态！)
+void difftest_attach() {
+  // 1. 同步寄存器: NEMU -> REF
+  ref_difftest_regcpy(&cpu, DIFFTEST_TO_REF);
+  
+  // 2. 同步物理内存: NEMU -> REF
+  // 将 NEMU 的整个物理内存拷贝给 REF，确保两者状态一致
+  ref_difftest_memcpy(PMEM_LEFT, guest_to_host(PMEM_LEFT), PMEM_SIZE, DIFFTEST_TO_REF);
+  
+  is_difftest_on = true;
+  Log("Difftest attached. State synced.");
+}
 
 // this is used to let ref skip instructions which
 // can not produce consistent behavior with NEMU
@@ -100,6 +121,7 @@ static void checkregs(CPU_state *ref, vaddr_t pc) {
 }
 
 void difftest_step(vaddr_t pc, vaddr_t npc) {
+  if (!is_difftest_on) return;
   CPU_state ref_r;
 
   if (skip_dut_nr_inst > 0) {
@@ -129,4 +151,6 @@ void difftest_step(vaddr_t pc, vaddr_t npc) {
 }
 #else
 void init_difftest(char *ref_so_file, long img_size, int port) { }
+void difftest_detach() { }
+void difftest_attach() { }
 #endif

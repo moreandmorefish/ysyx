@@ -4,18 +4,125 @@
 #include <string.h>
 #include <stdlib.h>
 
+// 辅助宏：构建 32位颜色 (00RRGGBB)
+#define OFF_COLOR(r, g, b) ((((uint32_t)(r)) << 16) | (((uint32_t)(g)) << 8) | ((uint32_t)(b)))
+
 void SDL_BlitSurface(SDL_Surface *src, SDL_Rect *srcrect, SDL_Surface *dst, SDL_Rect *dstrect) {
   assert(dst && src);
-  assert(dst->format->BitsPerPixel == src->format->BitsPerPixel);
+
+  // 1. 确定源矩形
+  int s_x = (srcrect == NULL) ? 0 : srcrect->x;
+  int s_y = (srcrect == NULL) ? 0 : srcrect->y;
+  int w   = (srcrect == NULL) ? src->w : srcrect->w;
+  int h   = (srcrect == NULL) ? src->h : srcrect->h;
+
+  // 2. 确定目标矩形
+  int d_x = (dstrect == NULL) ? 0 : dstrect->x;
+  int d_y = (dstrect == NULL) ? 0 : dstrect->y;
+
+  // 3. 裁剪 (Clipping)
+  if (d_x < 0) { s_x -= d_x; w += d_x; d_x = 0; }
+  if (d_y < 0) { s_y -= d_y; h += d_y; d_y = 0; }
+  if (d_x + w > dst->w) w = dst->w - d_x;
+  if (d_y + h > dst->h) h = dst->h - d_y;
+
+  if (w <= 0 || h <= 0) return;
+
+  // 4. 核心拷贝逻辑
+  // Case 1: 32位 -> 32位 (真彩色图片)
+  if (src->format->BitsPerPixel == 32 && dst->format->BitsPerPixel == 32) {
+    uint32_t *src_pixels = (uint32_t *)src->pixels;
+    uint32_t *dst_pixels = (uint32_t *)dst->pixels;
+    for (int i = 0; i < h; i++) {
+      memcpy(&dst_pixels[(d_y + i) * dst->w + d_x], 
+             &src_pixels[(s_y + i) * src->w + s_x], 
+             w * 4);
+    }
+  } 
+  // Case 2: 8位 -> 32位 (字体渲染、PAL)
+  else if (src->format->BitsPerPixel == 8 && dst->format->BitsPerPixel == 32) {
+    uint8_t *src_pixels = (uint8_t *)src->pixels;
+    uint32_t *dst_pixels = (uint32_t *)dst->pixels;
+    SDL_Color *palette = src->format->palette->colors;
+
+    for (int i = 0; i < h; i++) {
+      for (int j = 0; j < w; j++) {
+        uint8_t index = src_pixels[(s_y + i) * src->w + (s_x + j)];
+        // 索引 0 为透明色
+        if (index != 0) {
+          SDL_Color color = palette[index];
+          dst_pixels[(d_y + i) * dst->w + (d_x + j)] = OFF_COLOR(color.r, color.g, color.b);
+        }
+      }
+    }
+  }
 }
 
 void SDL_FillRect(SDL_Surface *dst, SDL_Rect *dstrect, uint32_t color) {
+  assert(dst);
+
+  int x, y, w, h;
+  if (dstrect == NULL) {
+    x = 0; y = 0; w = dst->w; h = dst->h;
+  } else {
+    x = dstrect->x; y = dstrect->y; w = dstrect->w; h = dstrect->h;
+  }
+
+  // 裁剪
+  if (x < 0) { w += x; x = 0; }
+  if (y < 0) { h += y; y = 0; }
+  if (x >= dst->w || y >= dst->h) return;
+  if (x + w > dst->w) w = dst->w - x;
+  if (y + h > dst->h) h = dst->h - y;
+  
+  if (w <= 0 || h <= 0) return;
+
+  // 填充逻辑
+  if (dst->format->BitsPerPixel == 32) {
+    uint32_t *pixels = (uint32_t *)dst->pixels;
+    for (int i = 0; i < h; i++) {
+      for (int j = 0; j < w; j++) {
+        pixels[(y + i) * dst->w + (x + j)] = color;
+      }
+    }
+  } else if (dst->format->BitsPerPixel == 8) {
+    uint8_t *pixels = (uint8_t *)dst->pixels;
+    for (int i = 0; i < h; i++) {
+      memset(&pixels[(y + i) * dst->w + x], (uint8_t)color, w);
+    }
+  }
 }
 
 void SDL_UpdateRect(SDL_Surface *s, int x, int y, int w, int h) {
+  assert(s);
+  if (w == 0 && h == 0) { w = s->w; h = s->h; }
+
+  // 申请临时缓冲区，将像素转换为紧凑的 32位格式传给 NDL
+  uint32_t *buf = malloc(w * h * 4);
+  assert(buf);
+
+  if (s->format->BitsPerPixel == 32) {
+    uint32_t *src = (uint32_t *)s->pixels;
+    for (int i = 0; i < h; i++) {
+      memcpy(&buf[i * w], &src[(y + i) * s->w + x], w * 4);
+    }
+  } else if (s->format->BitsPerPixel == 8) {
+    uint8_t *src = (uint8_t *)s->pixels;
+    SDL_Color *palette = s->format->palette->colors;
+    for (int i = 0; i < h; i++) {
+      for (int j = 0; j < w; j++) {
+        uint8_t index = src[(y + i) * s->w + (x + j)];
+        SDL_Color color = palette[index];
+        buf[i * w + j] = OFF_COLOR(color.r, color.g, color.b);
+      }
+    }
+  }
+
+  NDL_DrawRect(buf, x, y, w, h);
+  free(buf);
 }
 
-// APIs below are already implemented.
+// === 下方为已有的辅助函数，保持原样 ===
 
 static inline int maskToShift(uint32_t mask) {
   switch (mask) {
@@ -23,7 +130,7 @@ static inline int maskToShift(uint32_t mask) {
     case 0x0000ff00: return 8;
     case 0x00ff0000: return 16;
     case 0xff000000: return 24;
-    case 0x00000000: return 24; // hack
+    case 0x00000000: return 24; 
     default: assert(0);
   }
 }
@@ -62,6 +169,7 @@ SDL_Surface* SDL_CreateRGBSurface(uint32_t flags, int width, int height, int dep
   if (!(flags & SDL_PREALLOC)) {
     s->pixels = malloc(s->pitch * height);
     assert(s->pixels);
+    memset(s->pixels, 0, s->pitch * height);
   }
 
   return s;
@@ -108,14 +216,7 @@ void SDL_SoftStretch(SDL_Surface *src, SDL_Rect *srcrect, SDL_Surface *dst, SDL_
 
   assert(dstrect);
   if(w == dstrect->w && h == dstrect->h) {
-    /* The source rectangle and the destination rectangle
-     * are of the same size. If that is the case, there
-     * is no need to stretch, just copy. */
-    SDL_Rect rect;
-    rect.x = x;
-    rect.y = y;
-    rect.w = w;
-    rect.h = h;
+    SDL_Rect rect; rect.x = x; rect.y = y; rect.w = w; rect.h = h;
     SDL_BlitSurface(src, &rect, dst, dstrect);
   }
   else {
@@ -134,11 +235,6 @@ void SDL_SetPalette(SDL_Surface *s, int flags, SDL_Color *colors, int firstcolor
 
   if(s->flags & SDL_HWSURFACE) {
     assert(ncolors == 256);
-    for (int i = 0; i < ncolors; i ++) {
-      uint8_t r = colors[i].r;
-      uint8_t g = colors[i].g;
-      uint8_t b = colors[i].b;
-    }
     SDL_UpdateRect(s, 0, 0, 0, 0);
   }
 }
@@ -147,10 +243,7 @@ static void ConvertPixelsARGB_ABGR(void *dst, void *src, int len) {
   int i;
   uint8_t (*pdst)[4] = dst;
   uint8_t (*psrc)[4] = src;
-  union {
-    uint8_t val8[4];
-    uint32_t val32;
-  } tmp;
+  union { uint8_t val8[4]; uint32_t val32; } tmp;
   int first = len & ~0xf;
   for (i = 0; i < first; i += 16) {
 #define macro(i) \
@@ -164,10 +257,7 @@ static void ConvertPixelsARGB_ABGR(void *dst, void *src, int len) {
     macro(i + 8); macro(i + 9); macro(i +10); macro(i +11);
     macro(i +12); macro(i +13); macro(i +14); macro(i +15);
   }
-
-  for (; i < len; i ++) {
-    macro(i);
-  }
+  for (; i < len; i ++) { macro(i); }
 }
 
 SDL_Surface *SDL_ConvertSurface(SDL_Surface *src, SDL_PixelFormat *fmt, uint32_t flags) {
@@ -192,9 +282,5 @@ uint32_t SDL_MapRGBA(SDL_PixelFormat *fmt, uint8_t r, uint8_t g, uint8_t b, uint
   return p;
 }
 
-int SDL_LockSurface(SDL_Surface *s) {
-  return 0;
-}
-
-void SDL_UnlockSurface(SDL_Surface *s) {
-}
+int SDL_LockSurface(SDL_Surface *s) { return 0; }
+void SDL_UnlockSurface(SDL_Surface *s) {}
