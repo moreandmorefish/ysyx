@@ -18,7 +18,8 @@ uint32_t NDL_GetTicks() {
   struct timeval tv;
   // 调用 Newlib 的 gettimeofday，它会发起 SYS_gettimeofday 系统调用
   gettimeofday(&tv, NULL);
-  
+  static int count = 0;
+  if (count++ % 1000 == 0) printf("Tick: %d\n", tv.tv_sec * 1000 + tv.tv_usec / 1000);
   // 转换：秒*1000 + 微秒/1000 = 毫秒
   return tv.tv_sec * 1000 + tv.tv_usec / 1000;
 }

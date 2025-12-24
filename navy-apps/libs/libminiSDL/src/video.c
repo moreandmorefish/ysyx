@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 // 辅助宏：构建 32位颜色 (00RRGGBB)
 #define OFF_COLOR(r, g, b) ((((uint32_t)(r)) << 16) | (((uint32_t)(g)) << 8) | ((uint32_t)(b)))
@@ -93,13 +94,32 @@ void SDL_FillRect(SDL_Surface *dst, SDL_Rect *dstrect, uint32_t color) {
   }
 }
 
+static uint32_t static_draw_buf[400 * 300];
+
 void SDL_UpdateRect(SDL_Surface *s, int x, int y, int w, int h) {
   assert(s);
   if (w == 0 && h == 0) { w = s->w; h = s->h; }
 
-  // 申请临时缓冲区，将像素转换为紧凑的 32位格式传给 NDL
-  uint32_t *buf = malloc(w * h * 4);
-  assert(buf);
+  // [修改] 不再使用 malloc，使用预分配的静态缓冲区
+  uint32_t *buf = static_draw_buf;
+ if (w > 0 && h > 0) {
+      if (s->format->BitsPerPixel == 8) {
+          // 检查中间的一个像素
+          int mid_idx = (h/2) * s->w + (w/2);
+          uint8_t pixel = ((uint8_t*)s->pixels)[mid_idx];
+          SDL_Color c = s->format->palette->colors[pixel];
+          
+          printf("UpdateRect(8bpp): w=%d, h=%d, mid_pixel_idx=%d, palette_color=(%d,%d,%d)\n", 
+                 w, h, pixel, c.r, c.g, c.b);
+      } else {
+          printf("UpdateRect(32bpp): w=%d, h=%d\n", w, h);
+      }
+  }
+  // 简单的越界保护
+  if (w * h > 400 * 300) {
+    printf("SDL_UpdateRect: Rect too large! %dx%d\n", w, h);
+    return;
+  }
 
   if (s->format->BitsPerPixel == 32) {
     uint32_t *src = (uint32_t *)s->pixels;
@@ -119,7 +139,7 @@ void SDL_UpdateRect(SDL_Surface *s, int x, int y, int w, int h) {
   }
 
   NDL_DrawRect(buf, x, y, w, h);
-  free(buf);
+  // [修改] 不需要 free(buf)
 }
 
 // === 下方为已有的辅助函数，保持原样 ===
@@ -229,9 +249,19 @@ void SDL_SetPalette(SDL_Surface *s, int flags, SDL_Color *colors, int firstcolor
   assert(s->format);
   assert(s->format->palette);
   assert(firstcolor == 0);
+  printf("SDL_SetPalette: ncolors=%d, first_color_rgb=(%d,%d,%d)\n", 
+         ncolors, colors[0].r, colors[0].g, colors[0].b);
 
   s->format->palette->ncolors = ncolors;
-  memcpy(s->format->palette->colors, colors, sizeof(SDL_Color) * ncolors);
+  //memcpy(s->format->palette->colors, colors, sizeof(SDL_Color) * ncolors);
+  for (int i = 0; i < ncolors; i++) {
+      // 仙剑的颜色是 0-63，我们需要把它拉伸到 0-255
+      // 简单的做法是 左移 2 位 (*4)
+      s->format->palette->colors[i].r = colors[i].r << 2;
+      s->format->palette->colors[i].g = colors[i].g << 2;
+      s->format->palette->colors[i].b = colors[i].b << 2;
+      s->format->palette->colors[i].a = colors[i].a;
+  }
 
   if(s->flags & SDL_HWSURFACE) {
     assert(ncolors == 256);

@@ -70,6 +70,7 @@ int fs_open(const char *pathname, int flags, int mode) {
     if (strcmp(file_table[i].name, pathname) == 0) {
       // 每次打开文件，必须将偏移量重置为 0
       file_table[i].open_offset = 0; 
+      Log("fs_open: %s (fd=%d)", pathname, i);
       return i; // 返回文件描述符 (下标)
     }
   }
@@ -104,59 +105,115 @@ size_t fs_read(int fd, void *buf, size_t len) {
 }
 
 // 3. fs_write: 写文件
+// size_t fs_write(int fd, const void *buf, size_t len) {
+//   if (fd < 0 || fd >= NR_FILES) return 0;
+// 
+//   Finfo *f = &file_table[fd];
+// 
+//   // [修改] 优先使用设备特定的 write 函数
+//   // 这样 stdout/stderr 就会自动调用 serial_write
+//   if (f->write) {
+//     return f->write(buf, f->open_offset, len);
+//   }
+//   
+//   // [删除] 删掉原来这里关于 fd==1 || fd==2 的 if 语句块
+// 
+//   // 普通文件的写入逻辑保持不变
+//   size_t write_len = len;
+//   if (f->open_offset + len > f->size) {
+//     write_len = f->size - f->open_offset;
+//   }
+//   ramdisk_write(buf, f->disk_offset + f->open_offset, write_len);
+//   f->open_offset += write_len;
+//   return write_len;
+// }
+
 size_t fs_write(int fd, const void *buf, size_t len) {
   if (fd < 0 || fd >= NR_FILES) return 0;
-
   Finfo *f = &file_table[fd];
 
-  // [修改] 优先使用设备特定的 write 函数
-  // 这样 stdout/stderr 就会自动调用 serial_write
   if (f->write) {
     return f->write(buf, f->open_offset, len);
   }
-  
-  // [删除] 删掉原来这里关于 fd==1 || fd==2 的 if 语句块
 
-  // 普通文件的写入逻辑保持不变
+  // 普通文件写入
   size_t write_len = len;
   if (f->open_offset + len > f->size) {
     write_len = f->size - f->open_offset;
   }
-  ramdisk_write(buf, f->disk_offset + f->open_offset, write_len);
-  f->open_offset += write_len;
+  
+  if (write_len > 0) {
+    ramdisk_write(buf, f->disk_offset + f->open_offset, write_len);
+    f->open_offset += write_len;
+  }
   return write_len;
 }
 
 // 4. fs_lseek: 调整偏移量
-size_t fs_lseek(int fd, size_t offset, int whence) {
+// size_t fs_lseek(int fd, size_t offset, int whence) {
+//   if (fd < 0 || fd >= NR_FILES) return -1;
+//   
+//   Finfo *f = &file_table[fd];
+//   size_t new_offset = f->open_offset;
+// 
+//   switch (whence) {
+//     case SEEK_SET: // 也就是 0
+//       new_offset = offset;
+//       break;
+//     case SEEK_CUR: // 也就是 1
+//       new_offset = f->open_offset + offset;
+//       break;
+//     case SEEK_END: // 也就是 2
+//       new_offset = f->size + offset;
+//       break;
+//     default:
+//       panic("Invalid whence: %d", whence);
+//   }
+// 
+//   // 边界检查: offset 允许等于 size (指向文件末尾)，但不允许越界
+//   if (new_offset < 0 || new_offset > f->size) {
+//     // 真实的 lseek 可能会返回错误，这里我们简单处理，或者 panic
+//     // panic("lseek out of bounds");
+//     // 暂时允许稍微越界，或者根据需要截断。这里保持原样返回
+//   }
+//   
+//   f->open_offset = new_offset;
+//   return new_offset;
+// }
+// 将参数 offset 改为有符号类型 intptr_t 或 off_t
+// nanos-lite/src/fs.c
+
+size_t fs_lseek(int fd, intptr_t offset, int whence) {
   if (fd < 0 || fd >= NR_FILES) return -1;
-  
   Finfo *f = &file_table[fd];
-  size_t new_offset = f->open_offset;
+
+  // 使用 intptr_t 存储中间计算结果，防止溢出
+  intptr_t target_offset = 0;
 
   switch (whence) {
-    case SEEK_SET: // 也就是 0
-      new_offset = offset;
+    case SEEK_SET:
+      target_offset = offset;
       break;
-    case SEEK_CUR: // 也就是 1
-      new_offset = f->open_offset + offset;
+    case SEEK_CUR:
+      target_offset = (intptr_t)f->open_offset + offset;
       break;
-    case SEEK_END: // 也就是 2
-      new_offset = f->size + offset;
+    case SEEK_END:
+      target_offset = (intptr_t)f->size + offset;
       break;
     default:
       panic("Invalid whence: %d", whence);
   }
 
-  // 边界检查: offset 允许等于 size (指向文件末尾)，但不允许越界
-  if (new_offset < 0 || new_offset > f->size) {
-    // 真实的 lseek 可能会返回错误，这里我们简单处理，或者 panic
-    // panic("lseek out of bounds");
-    // 暂时允许稍微越界，或者根据需要截断。这里保持原样返回
+  // 边界检查：偏移量不能小于 0
+  if (target_offset < 0) {
+    f->open_offset = 0;
+  } else if (target_offset > f->size) {
+    f->open_offset = f->size;
+  } else {
+    f->open_offset = (size_t)target_offset;
   }
-  
-  f->open_offset = new_offset;
-  return new_offset;
+
+  return f->open_offset;
 }
 
 // 5. fs_close: 关闭文件

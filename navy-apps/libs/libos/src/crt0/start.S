@@ -29,6 +29,16 @@ _start:
   jal call_main
 
 #elif defined(__riscv)
+  # [重点修改] 强制将栈指针设为 0x87FFFFF0 (内存顶端)
+  # 这样栈从 0x88000000 向下长，程序从 0x83000000 向上长，中间极其安全
+  lui sp, 0x88000
+  addi sp, sp, -16
+
+  # 清空 a 寄存器，防止 main 函数误读 argv/envp 导致小鸟等程序崩溃
+  li a0, 0
+  li a1, 0
+  li a2, 0
+  
   mv s0, zero
   jal call_main
 
