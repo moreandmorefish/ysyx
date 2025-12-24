@@ -59,3 +59,20 @@ void naive_uload(PCB *pcb, const char *filename) {
   Log("Jump to entry = %p", entry);
   ((void(*)())entry) ();
 }
+
+Context* kcontext(Area kstack, void (*entry)(void *), void *arg);
+
+void context_uload(PCB *pcb, const char *filename, char *const argv[]) {
+  // 1. 加载程序，获取入口地址
+  uintptr_t entry = loader(pcb, filename);
+
+  // 2. 准备栈空间 (使用 PCB 里的 stack)
+  Area kstack;
+  kstack.start = (void*)pcb;
+  kstack.end = (void*)pcb + STACK_SIZE;
+
+  // 3. 核心步骤：调用 kcontext 创建上下文
+  // entry: 强转为函数指针。用户程序的入口地址。
+  // arg: 目前先传 NULL，后续做参数传递时会用到 argv
+  pcb->cp = kcontext(kstack, (void*)entry, NULL); 
+}

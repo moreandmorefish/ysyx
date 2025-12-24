@@ -70,8 +70,11 @@ size_t sys_write(int fd, const void *buf, size_t count) {
   // 目前不支持其他文件描述符，暂时忽略
   return -1; 
 }
+
+Context* schedule(Context *prev);
+
 //#define STRACE 1
-void do_syscall(Context *c) {
+Context* do_syscall(Context *c) {
   uintptr_t a[4];
   a[0] = c->GPR1; // syscall ID
   a[1] = c->GPR2; // arg 1
@@ -94,7 +97,7 @@ void do_syscall(Context *c) {
       break;
 
     case SYS_yield:
-      yield();
+      return schedule(c);
       c->GPRx = 0;
       break;
 
@@ -146,4 +149,5 @@ void do_syscall(Context *c) {
     default: 
       panic("Unhandled syscall ID = %d", a[0]);
   }
+  return c;
 }
