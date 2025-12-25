@@ -63,16 +63,85 @@ void naive_uload(PCB *pcb, const char *filename) {
 Context* kcontext(Area kstack, void (*entry)(void *), void *arg);
 
 void context_uload(PCB *pcb, const char *filename, char *const argv[]) {
+
+  Log("Sizeof(Context) = %d", sizeof(Context));
+  
   // 1. 加载程序，获取入口地址
   uintptr_t entry = loader(pcb, filename);
 
-  // 2. 准备栈空间 (使用 PCB 里的 stack)
-  Area kstack;
-  kstack.start = (void*)pcb;
-  kstack.end = (void*)pcb + STACK_SIZE;
+  // 2. 初始化栈指针到栈底 (高地址)
+  // 我们使用 PCB 的内核栈区域作为用户栈 (PA4简化处理)
+  void *sp = (void *)pcb->stack + STACK_SIZE;
 
-  // 3. 核心步骤：调用 kcontext 创建上下文
-  // entry: 强转为函数指针。用户程序的入口地址。
-  // arg: 目前先传 NULL，后续做参数传递时会用到 argv
-  pcb->cp = kcontext(kstack, (void*)entry, NULL); 
+  // 3. 处理参数 (User Process Arguments)
+  // 目标栈布局 (从高地址向低地址生长):
+  // [ String Area (参数字符串) ]
+  // [ argv[n] = NULL          ]
+  // [ ...                     ]
+  // [ argv[0]                 ]
+  // [ argc                    ]  <-- sp 指向这里
+
+  int argc = 0;
+  if (argv) {
+    while (argv[argc]) argc++; // 统计参数个数
+  }
+
+  // ============ 新增调试 Log ============
+  Log("context_uload: Loading file '%s', calculated argc = %d", filename, argc);
+  // ====================================
+
+  // 定义一个临时数组来存储字符串在栈上的新地址
+  // (使用 uintptr_t 保证兼容 32/64 位)
+  uintptr_t new_argv[argc > 0 ? argc : 1];
+
+  // A. 拷贝字符串到栈上 (String Area)
+  if (argc > 0) {
+    for (int i = 0; i < argc; i++) {
+      size_t len = strlen(argv[i]) + 1; // +1 for '\0'
+      sp -= len; // 栈生长
+      strcpy((char *)sp, argv[i]); // 拷贝字符串
+      new_argv[i] = (uintptr_t)sp; // 记录新地址
+    }
+  }
+
+  // B. 内存对齐 (Align)
+  // 保持指针数组按字长对齐 (4字节 for 32位, 8字节 for 64位)
+  //sp = (void *)((uintptr_t)sp & ~(sizeof(uintptr_t) - 1));
+  sp = (void *)((uintptr_t)sp & ~0xF);
+  // C. 填充 argv 指针数组
+  // C-1. 结尾的 NULL
+  sp -= sizeof(uintptr_t);
+  *(uintptr_t *)sp = 0;
+
+  // C-2. 依次填充 argv[i] (倒序入栈，这样 argv[0] 在低地址)
+  if (argc > 0) {
+    for (int i = argc - 1; i >= 0; i--) {
+      sp -= sizeof(uintptr_t);
+      *(uintptr_t *)sp = new_argv[i];
+      printf("this the %d argv in %x\n", i, sp);
+    }
+  }
+
+  // D. 填充 argc
+  sp -= sizeof(uintptr_t);
+  *(uintptr_t *)sp = argc;
+
+  // 4. 调用 kcontext 创建上下文
+  Area kstack;
+  kstack.start = (void *)pcb;
+  kstack.end = sp; 
+
+  // ============ 关键修改 ============
+  // 直接把 argc 作为第三个参数传进去！
+  // kcontext 会自动把它放入 a0 寄存器，比我们要靠谱。
+  pcb->cp = kcontext(kstack, (void*)entry, (void*)(uintptr_t)argc); 
+  // ================================
+
+  // 我们只需要手动处理 a1 (argv) 即可
+  // argv 的地址就在 argc 的上面 (即 sp + 指针大小)
+  pcb->cp->gpr[11] = (uintptr_t)sp + sizeof(uintptr_t); 
+
+  // 添加一条调试日志，看看 context 里到底存了啥
+  Log("Context created: a0(argc)=%d, a1(argv)=%p, sp=%p", 
+      pcb->cp->GPRx, pcb->cp->gpr[11], sp);
 }

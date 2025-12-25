@@ -44,8 +44,10 @@ void init_proc() {
   Log("Initializing processes...");
 
   // ================= 2. 修改初始化逻辑 =================
-  // 创建两个内核线程，分别传入参数 "A" 和 "B"
-  context_uload(&pcb[0], "/bin/dummy", NULL);
+  
+  char *argv[] = {"/bin/dummy", "--skip", NULL};
+
+  context_uload(&pcb[0], "/bin/dummy", argv);
   context_kload(&pcb[1], hello_fun, "B");
 
   // 暂时注释掉加载用户程序，先测试内核线程切换

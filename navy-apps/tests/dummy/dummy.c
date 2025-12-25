@@ -1,12 +1,19 @@
-#include <stdint.h>
-
 #ifdef __ISA_NATIVE__
 #error can not support ISA=native
 #endif
 
 #define SYS_yield 1
-extern int _syscall_(int, uintptr_t, uintptr_t, uintptr_t);
 
-int main() {
-  return _syscall_(SYS_yield, 0, 0, 0);
+
+#include <stdint.h>
+#include <stdio.h>
+
+int main(int argc, char *argv[]) {
+  printf("Dummy Main: argc = %d\n", argc);
+
+  for (int i = 0; i < argc; i++) {
+    printf("Dummy Main: argv[%d] = %s\n", i, argv[i]);
+  }
+
+  return 0;
 }
