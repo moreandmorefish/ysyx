@@ -140,6 +140,7 @@ void context_uload(PCB *pcb, const char *filename, char *const argv[]) {
   // 我们只需要手动处理 a1 (argv) 即可
   // argv 的地址就在 argc 的上面 (即 sp + 指针大小)
   pcb->cp->gpr[11] = (uintptr_t)sp + sizeof(uintptr_t); 
+  pcb->cp->gpr[12] = 0;
 
   // 添加一条调试日志，看看 context 里到底存了啥
   Log("Context created: a0(argc)=%d, a1(argv)=%p, sp=%p", 

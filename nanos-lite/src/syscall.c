@@ -3,6 +3,11 @@
 #include "fs.h"
 #include <proc.h>
 
+extern PCB *current;
+void context_uload(PCB *pcb, const char *filename, char *const argv[]);
+void switch_boot_pcb();
+
+
 char *syscall_names[] = {
   "SYS_exit",
   "SYS_yield",
@@ -136,13 +141,17 @@ Context* do_syscall(Context *c) {
       c->GPRx = sys_gettimeofday((struct timeval *)a[1], (struct timezone *)a[2]);
       break;
     case SYS_execve:
+      // a[1]: filename, a[2]: argv, a[3]: envp (目前 context_uload 暂未处理 envp，可忽略)
       if (a[1] != 0) {
-        // [关键操作] 加载新程序，覆盖当前进程
-        // 注意：execve 成功后是不返回的，因为当前进程的代码都被覆盖了
-        // 它会直接跳转到新程序的 entry 执行
-        naive_uload(NULL, (const char *)a[1]);
+        // [修复] 使用 context_uload 加载新程序
+        // 这会重置 current 进程的栈，构造参数，并更新 trapframe (cp)
+        context_uload(current, (const char *)a[1], (char *const *)a[2]);
+        
+        // [关键] 返回新构造的上下文 (current->cp)
+        // 这样当 trap.S 恢复现场时，就会切换到新程序的入口和新栈
+        return current->cp; 
       } else {
-        c->GPRx = -1; // 失败返回 -1
+        c->GPRx = -1;
       }
       break;
 
