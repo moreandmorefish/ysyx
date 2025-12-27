@@ -96,10 +96,12 @@ Context* do_syscall(Context *c) {
 
   switch (a[0]) {
     case SYS_exit:
-      naive_uload(NULL, "/bin/menu");
-      c->GPRx = 0;
-      halt(a[1]);
-      break;
+      // 1. 加载 menu，构造干净的栈和上下文
+      // 注意：menu 不需要参数，所以 argv 传 NULL
+      context_uload(current, "/bin/menu", NULL);
+      
+      // 2. 立即切换到 menu 执行
+      return current->cp;
 
     case SYS_yield:
       return schedule(c);
