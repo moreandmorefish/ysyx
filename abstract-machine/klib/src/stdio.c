@@ -7,7 +7,7 @@
 #include <limits.h> 
 
 #if !defined(__ISA_NATIVE__) || defined(__NATIVE_USE_KLIB__)
-int itoa(int value, char *str, int base); 
+int klib_itoa(int value, char *str, int base); 
 int vsprintf(char *out, const char *fmt, va_list ap);
 
 int printf(const char *fmt, ...) {
@@ -36,12 +36,12 @@ int vsprintf(char *out, const char *fmt, va_list ap) {
         switch (*p) {
             case 'd': {
                 int val = va_arg(ap, int);
-                buffer += itoa(val, buffer, 10);
+                buffer += klib_itoa(val, buffer, 10);
                 break;
             }
             case 'x': {
                 unsigned int val = va_arg(ap, unsigned int);
-                buffer += itoa(val, buffer, 16);
+                buffer += klib_itoa(val, buffer, 16);
                 break;
             }
             case 's': {
@@ -101,7 +101,7 @@ int snprintf(char *out, size_t n, const char *fmt, ...) {
                     int val = va_arg(args, int);
                     // 调用修复后的 itoa，不会无限循环
                     char tmp_buf[12]; // 临时缓冲区存储整数转换结果
-                    int len = itoa(val, tmp_buf, 10);
+                    int len = klib_itoa(val, tmp_buf, 10);
                     // 将 tmp_buf 内容复制到 buffer，注意长度限制
                     for(int i = 0; i < len && (buffer - out) < n - 1; i++) {
                         *buffer++ = tmp_buf[i];
@@ -146,7 +146,7 @@ int vsnprintf(char *out, size_t n, const char *fmt, va_list ap) {
   panic("Not implemented");
 }
 
-int itoa(int value, char *str, int base) {
+int klib_itoa(int value, char *str, int base) {
     // 1. 检查基数合法性
     if (base < 2 || base > 32) {
         *str = '\0';
