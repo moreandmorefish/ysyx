@@ -11,7 +11,7 @@ Context* __am_irq_handle(Context *c) {
     Event ev = {0};
     switch (c->mcause) {
       case 11: 
-        if (c->gpr[17] == -1) 
+        if (c->GPR1 == -1) 
         {  // a7=-1 → yield自陷
             ev.event = EVENT_YIELD;
         } else {  // a7=其他值 → 系统调用
