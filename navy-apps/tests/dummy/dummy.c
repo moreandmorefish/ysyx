@@ -9,11 +9,13 @@
 #include <stdio.h>
 
 int main(int argc, char *argv[]) {
-  printf("Dummy Main: argc = %d\n", argc);
+  // printf("Dummy Main: argc = %d\n", argc);
 
-  for (int i = 0; i < argc; i++) {
-    printf("Dummy Main: argv[%d] = %s\n", i, argv[i]);
-  }
+  // for (int i = 0; i < argc; i++) {
+  //   printf("Dummy Main: argv[%d] = %s\n", i, argv[i]);
+  // }
 
-  return 0;
+  // return 0;
+  _exit(42);
+  return 0; // 不会执行到这里
 }

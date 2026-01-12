@@ -4,7 +4,8 @@
 html:
 	cat Makefile | sed 's/^\([^#]\)/    \1/g' | markdown_py > Makefile.html
 .PHONY: html
-
+# 开启 VME 模式，将链接地址改为 0x40000000
+export VME = 1
 ## 1. Basic Setup and Checks
 
 ### Default to build an application
@@ -179,7 +180,7 @@ $(CLEAN_ALL):
 .PHONY: clean-all $(CLEAN_ALL)
 
 ### Build fsimg and ramdisk for Nanos-lite
-APPS = menu nslider bird nterm pal busybox
+APPS = menu nslider bird nterm pal
 TESTS = dummy hello file-test timer-test event-test bmp-test 
 
 fsimg: $(addprefix apps/, $(APPS)) $(addprefix tests/, $(TESTS))

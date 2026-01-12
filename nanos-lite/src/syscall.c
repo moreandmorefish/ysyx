@@ -6,6 +6,8 @@
 extern PCB *current;
 void context_uload(PCB *pcb, const char *filename, char *const argv[]);
 void switch_boot_pcb();
+void __am_switch(Context *c);
+int mm_brk(uintptr_t brk);
 
 
 char *syscall_names[] = {
@@ -80,6 +82,7 @@ Context* schedule(Context *prev);
 
 //#define STRACE 1
 Context* do_syscall(Context *c) {
+  c->mepc += 4;
   uintptr_t a[4];
   a[0] = c->GPR1; // syscall ID
   a[1] = c->GPR2; // arg 1
@@ -99,7 +102,7 @@ Context* do_syscall(Context *c) {
       // 1. 加载 menu，构造干净的栈和上下文
       // 注意：menu 不需要参数，所以 argv 传 NULL
       context_uload(current, "/bin/menu", NULL);
-      
+      __am_switch(current->cp);
       // 2. 立即切换到 menu 执行
       return current->cp;
 
@@ -135,7 +138,7 @@ Context* do_syscall(Context *c) {
       break;
 
     case SYS_brk:
-      c->GPRx = 0; 
+      c->GPRx = mm_brk(a[1]);
       break;
 
     case SYS_gettimeofday:
@@ -151,6 +154,7 @@ Context* do_syscall(Context *c) {
         
         // [关键] 返回新构造的上下文 (current->cp)
         // 这样当 trap.S 恢复现场时，就会切换到新程序的入口和新栈
+        __am_switch(current->cp);
         return current->cp; 
       } else {
         c->GPRx = -1;

@@ -23,6 +23,7 @@ typedef struct {
   word_t mstatus;
   vaddr_t mepc;
   word_t mtvec;
+  word_t satp;   // <--- 新增：添加 satp 寄存器
 } riscv32_CSRs;
 
 typedef struct {
@@ -36,6 +37,6 @@ typedef struct {
   uint32_t inst;
 } MUXDEF(CONFIG_RV64, riscv64_ISADecodeInfo, riscv32_ISADecodeInfo);
 
-#define isa_mmu_check(vaddr, len, type) (MMU_DIRECT)
+//#define isa_mmu_check(vaddr, len, type) (MMU_DIRECT)
 
 #endif

@@ -5,8 +5,6 @@
 static Context* (*user_handler)(Event, Context*) = NULL;
 
 Context* __am_irq_handle(Context *c) {
-  //printf("c->mcause is %d\n", c->mcause);
-  //printf("a7 is %x\n", c->gpr[17]);
   if (user_handler) {
     Event ev = {0};
     switch (c->mcause) {
@@ -66,6 +64,7 @@ Context *kcontext(Area kstack, void (*entry)(void *), void *arg) {
   // 根据 RISC-V 调用规范，函数第一个参数放在 a0 寄存器。
   // 在你的 riscv.h 中，GPR2 被定义为 gpr[10]，对应 a0。
   c->gpr[10] = (uintptr_t)arg;
+  c->pdir = NULL;
 
   // 5. (可选) 设置返回地址 ra / gpr[1]
   // 这是一个好习惯：如果 entry 函数不小心 return 了，它会跳到哪里？

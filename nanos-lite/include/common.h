@@ -12,4 +12,5 @@
 #include <klib-macros.h>
 #include <debug.h>
 #define HAS_CTE 1
+#define HAS_VME 1
 #endif
