@@ -9,12 +9,16 @@ Context* __am_irq_handle(Context *c) {
     Event ev = {0};
     switch (c->mcause) {
       case 11: 
-        if (c->GPR1 == -1) 
-        {  // a7=-1 → yield自陷
+      case  8:
+        if (c->GPR1 == -1) {  // a7=-1 → yield自陷
             ev.event = EVENT_YIELD;
         } else {  // a7=其他值 → 系统调用
             ev.event = EVENT_SYSCALL;
         }
+        c->mepc += 4;
+        break;
+      case 0x80000007: 
+        ev.event = EVENT_IRQ_TIMER;
         break;
       default: ev.event = EVENT_ERROR; break;
     }

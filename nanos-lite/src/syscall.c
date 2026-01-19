@@ -82,7 +82,6 @@ Context* schedule(Context *prev);
 
 //#define STRACE 1
 Context* do_syscall(Context *c) {
-  c->mepc += 4;
   uintptr_t a[4];
   a[0] = c->GPR1; // syscall ID
   a[1] = c->GPR2; // arg 1
