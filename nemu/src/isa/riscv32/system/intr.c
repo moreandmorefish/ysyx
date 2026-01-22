@@ -25,7 +25,19 @@ word_t isa_raise_intr(word_t NO, vaddr_t epc) {
   /* 2. 保存中断原因到 mcause */
   cpu.csr.mcause = NO;
 
+  /* 3. 硬件原子操作：保存并关闭中断 (Critical!) */
+  // a. 将 MIE (Bit 3) 保存到 MPIE (Bit 7)
+  if (cpu.csr.mstatus & MSTATUS_MIE) {
+    cpu.csr.mstatus |= MSTATUS_MPIE;
+  } else {
+    cpu.csr.mstatus &= ~MSTATUS_MPIE;
+  }
+  
+  // b. 关闭 MIE (Bit 3) -> 关中断
+  cpu.csr.mstatus &= ~MSTATUS_MIE;
 
+  /* 4. 返回入口地址 mtvec */
+  // (通常 RISC-V 还有 Mode 判断，PA 中简化为直接跳 mtvec)
   return cpu.csr.mtvec;
 }
 

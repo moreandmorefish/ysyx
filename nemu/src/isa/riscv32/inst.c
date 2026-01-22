@@ -205,7 +205,24 @@ INSTPAT_START();
   INSTPAT("??????? ????? ????? 010 ????? 11100 11", csrrs  , I, R(rd) = CSR(imm); CSR(imm) |= src1);
   INSTPAT("0000000 00000 00000 000 00000 11100 11", ecall  , I, ECALL(s->pc));
   //INSTPAT("0011000 00010 00000 000 00000 11100 11", mret   , R, s->dnpc = CSR(0x341) + 4);
-INSTPAT("0011000 00010 00000 000 00000 11100 11", mret   , N, s->dnpc = CSR(0x341));
+  //INSTPAT("0011000 00010 00000 000 00000 11100 11", mret   , N, s->dnpc = CSR(0x341));
+  // 增加时间中断
+  INSTPAT("0011000 00010 00000 000 00000 11100 11", mret   , N, ({
+    // 1. 恢复 PC
+    s->dnpc = CSR(0x341); // mepc
+
+    // 2. 恢复中断状态 (MIE = MPIE)
+    word_t mstatus = CSR(0x300);
+    bool mpie = (mstatus & MSTATUS_MPIE) != 0;
+    if (mpie) mstatus |= MSTATUS_MIE; 
+    else      mstatus &= ~MSTATUS_MIE;
+
+    // 3. 规范要求：MPIE 必须置为 1
+    mstatus |= MSTATUS_MPIE;
+
+    // 4. 写回 mstatus
+    cpu.csr.mstatus = mstatus; 
+  }));
 INSTPAT("0000000 00001 00000 000 00000 11100 11", ebreak , N, NEMUTRAP(s->pc, R(10))); // R(10) is $a0
 INSTPAT("??????? ????? ???? ??? ????? ????? ??", inv     , N, INV(s->pc));
 INSTPAT_END();

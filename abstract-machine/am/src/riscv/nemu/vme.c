@@ -74,17 +74,27 @@ void __am_get_cur_as(Context *c) {
   c->pdir = (vme_enable ? (void *)get_satp() : NULL);
 }
 
+// 在文件头部添加声明
+extern void* kas_ptr_debug_copy; // 稍后在 vme_init 里赋值
+
 void __am_switch(Context *c) {
-  if (vme_enable && c->pdir != NULL) {
-    set_satp(c->pdir);
-    // 必须加这两行！
-    // 1. 刷新页表缓存 (虽然你可能没做 TLB，但 NEMU 内部有)
-    //asm volatile("sfence.vma");
-    
-    // 2. 刷新指令缓存 (这是给 NEMU 模拟器看的！)
-    // 告诉 NEMU："内存变了，把你缓存的那些旧指令扔掉，重新读！"
-    //asm volatile("fence.i");
-    printf("sfence.vma executed. fence.i executed\n");
+  if (vme_enable) {
+    if (c->pdir != NULL) {
+      set_satp(c->pdir);
+    } else {
+      // ================= 诊断探针 Start =================
+      // 打印此时试图设置的内核页表地址
+      // 如果 kas.ptr 是 0，说明内核页表初始化失败，那就是根本原因！
+      printf("DEBUG: Switching to Kernel. kas.ptr = %x\n", kas.ptr);
+      
+      set_satp(kas.ptr);
+      
+      // 检查是否真的写进去了
+      uintptr_t current_satp;
+      asm volatile("csrr %0, satp" : "=r"(current_satp));
+      printf("DEBUG: satp set to %x\n", current_satp);
+      // ================= 诊断探针 End =================
+    }
   }
 }
 

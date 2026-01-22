@@ -175,4 +175,5 @@ void context_uload(PCB *pcb, const char *filename, char *const argv[]) {
   // 这个地址对应的物理页，new_page 已经清零过了。
   // 所以 _start 读取 0(sp) 会读到 0 (即 argc=0)。
   // 这是安全的！
+  pcb->cp->mstatus |= 0x80;
 }

@@ -18,6 +18,13 @@
 
 #include <common.h>
 
+// --- 新增：mstatus 寄存器的位掩码定义 ---
+#define MSTATUS_MIE  (1 << 3)  // Machine Interrupt Enable
+#define MSTATUS_MPIE (1 << 7)  // Machine Previous Interrupt Enable
+#define MSTATUS_SPP  (1 << 8)  // Supervisor Previous Privilege
+
+// --- 新增：中断号定义 (RISC-V 32 Standard) ---
+#define IRQ_TIMER    0x80000007
 
 typedef struct {
   word_t mcause;

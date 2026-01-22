@@ -20,10 +20,12 @@ void switch_boot_pcb() {
 void hello_fun(void *arg) {
   int j = 1;
   while (1) {
-    // 打印 arg，这样我们就能区分是哪个线程在跑了
-    Log("Hello World from Nanos-lite with arg '%s' for the %dth time!", (char*)arg, j);
+    // 每隔 100次调度 打印一次，防止刷屏太快
+    if (j % 10 == 0) {
+      Log("Hello World from Nanos-lite with arg '%s' for the %dth time!", (char*)arg, j);
+    }
     j ++;
-    yield(); // 主动让出 CPU，触发 schedule
+    yield();
   }
 }
 
@@ -33,7 +35,7 @@ void context_kload(PCB *pcb, void (*entry)(void *), void *arg) {
   // 核心逻辑：计算栈的范围
   // PCB 结构体位于栈底 (低地址)，栈顶在 高地址
   kstack.start = (void*)pcb->stack;
-  kstack.end = (void*)pcb + STACK_SIZE;
+  kstack.end = (void*)pcb->stack + STACK_SIZE;
 
   // 调用 AM 的 kcontext 构造上下文，并保存在 PCB 中
   pcb->cp = kcontext(kstack, entry, arg);
@@ -55,38 +57,51 @@ void init_proc() {
   // naive_uload(NULL, "/bin/menu");
 }
 void check_dummy_entry_permission(PCB *pcb);
+
 Context* schedule(Context *prev) {
-  // ================= 3. 实现调度逻辑 =================
-  
-  // 1. 保存当前进程的上下文
-  // 这里的 prev 是发生中断/yield 前那个进程的 Context 指针
   current->cp = prev;
-
-  // 2. 选择下一个要运行的进程 (简单的轮转调度)
-  // 如果当前是 pcb[0]，就切到 pcb[1]；否则切回 pcb[0]
-  // 注意：如果是从 boot (main) 第一次进来，current 是 pcb_boot，这里也会切到 pcb[0]
+  current->cp->pdir = current->as.ptr;
   current = (current == &pcb[0] ? &pcb[1] : &pcb[0]);
-  Log("Switching to PCB[%d], cp=%x, sp=%x, mepc=%x", 
-      (current == &pcb[0] ? 0 : 1), 
-      current->cp, 
-      current->cp->gpr[2],  // <--- 看看它是 0 吗？
-      current->cp->mepc);
 
-  if (current == &pcb[1]) { // 如果切到 dummy
-    // 打印 mtvec 寄存器，确认异常入口是否正常
-    uintptr_t mtvec;
-    asm volatile("csrr %0, mtvec" : "=r"(mtvec));
-    Log("Current mtvec = %x", mtvec);
-
-    // 检查页表权限
-    check_dummy_entry_permission(current);
+  // ================= 实验探针 =================
+  // 我们只盯着 dummy (pcb[1]) 看
+  if (current == &pcb[1]) {
+    // 打印出 dummy 此时此刻持有的一级页表物理地址 (pdir)
+    Log("DEBUG CHECK: Dummy is returning. cp=%x, cp->pdir=%x, as.ptr=%x", 
+        current->cp, current->cp->pdir, current->as.ptr);
+    
+    // 逻辑验证：如果 pdir 是 0，或者是一个奇怪的值（比如 ASCII 码），那就出大问题了
+    if (current->cp->pdir != current->as.ptr) {
+      Log("!!! ALARM !!! Stack Context pdir (garbage?) does NOT match Process pdir!");
+    }
   }
+  // ===========================================
+
+  if (current == &pcb[0]) {
+      // 保持你原来的 Log 不动
+      Log("DEBUG: Hello_fun gp register = %x", current->cp->gpr[3]);
+  }
+  else Log("DEBUG: dummy gp register = %x", current->cp->gpr[3]);
   
   __am_switch(current->cp);
-  // 3. 返回新进程的上下文指针
-  // trap.S 里的汇编代码会把这个指针赋值给 sp，然后恢复寄存器
   return current->cp;
 }
+// Context* schedule(Context *prev) {
+//   // 1. 保存当前上下文
+//   current->cp = prev;
+// 
+//   // 2. [关键修复] 强制修复栈上的 pdir
+//   // 即使栈被踩了，这行也能把正确的页表地址写回去！
+//   current->cp->pdir = current->as.ptr;
+// 
+//   // 3. 切换进程
+//   current = (current == &pcb[0] ? &pcb[1] : &pcb[0]);
+// 
+//   // 4. 切换页表
+//   __am_switch(current->cp);
+// 
+//   return current->cp;
+// }
 
 
 // 在 schedule 函数前面定义
