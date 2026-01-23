@@ -23,6 +23,9 @@ enum { MODE_U, MODE_S, MODE_M = 3 };
 #define MSTATUS_MXR  (1 << 19)
 #define MSTATUS_SUM  (1 << 18)
 
+#define KERNEL_MODE 3 // Machine Mode
+#define USER_MODE   0 // User Mode
+
 #if __riscv_xlen == 64
 #define MSTATUS_SXL  (2ull << 34)
 #define MSTATUS_UXL  (2ull << 32)

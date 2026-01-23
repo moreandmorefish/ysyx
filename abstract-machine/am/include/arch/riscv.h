@@ -17,7 +17,7 @@ struct Context {
   
   uintptr_t mcause, mstatus, mepc;
   void *pdir;
-  //uintptr_t np;
+  uintptr_t np;
 };
 
 // 3. 定义关键寄存器别名 (用于 syscall 或传参)

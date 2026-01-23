@@ -10,10 +10,14 @@
 
 int main(int argc, char *argv[]) {
    printf("Dummy Main: argc = %d\n", argc);
-   int j = 0;
+   int i,j = 0;
   while(1)
   {
-    printf("Dummy Running... %d\n", j++);
+    j ++;
+    if (j == 10000) {
+      printf("dummydummydummy for the %dth time!\n", i ++);
+      j = 0;
+    }
   }
   return 0; // 不会执行到这里
 }

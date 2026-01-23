@@ -18,12 +18,20 @@
 
 #include <common.h>
 
-// --- 新增：mstatus 寄存器的位掩码定义 ---
-#define MSTATUS_MIE  (1 << 3)  // Machine Interrupt Enable
-#define MSTATUS_MPIE (1 << 7)  // Machine Previous Interrupt Enable
-#define MSTATUS_SPP  (1 << 8)  // Supervisor Previous Privilege
+// --- mstatus 寄存器的位掩码定义 ---
+#define MSTATUS_MIE  (1 << 3)   // Machine Interrupt Enable
+#define MSTATUS_MPIE (1 << 7)   // Machine Previous Interrupt Enable
+#define MSTATUS_SPP  (1 << 8)   // Supervisor Previous Privilege
+#define MSTATUS_MPP  (3 << 11)  // [新增] Machine Previous Privilege (Bits 11-12)
 
-// --- 新增：中断号定义 (RISC-V 32 Standard) ---
+// --- 特权级模式定义 [新增] ---
+enum { 
+  U_MODE = 0, // User Mode
+  S_MODE = 1, // Supervisor Mode
+  M_MODE = 3  // Machine Mode
+};
+
+// --- 中断号定义 ---
 #define IRQ_TIMER    0x80000007
 
 typedef struct {
@@ -31,7 +39,8 @@ typedef struct {
   word_t mstatus;
   vaddr_t mepc;
   word_t mtvec;
-  word_t satp;   // <--- 新增：添加 satp 寄存器
+  word_t satp;   
+  word_t mscratch;
 } riscv32_CSRs;
 
 typedef struct {
@@ -39,8 +48,12 @@ typedef struct {
   vaddr_t pc;
   riscv32_CSRs csr;
 
-  // --- 新增：中断引脚状态 ---
+  // --- 中断引脚状态 ---
   bool INTR;
+
+  // --- [新增] 当前特权级 ---
+  // CPU 当前运行在哪个模式 (U_MODE / M_MODE)
+  uint8_t mode; 
   
 } MUXDEF(CONFIG_RV64, riscv64_CPU_state, riscv32_CPU_state);
 
@@ -48,7 +61,5 @@ typedef struct {
 typedef struct {
   uint32_t inst;
 } MUXDEF(CONFIG_RV64, riscv64_ISADecodeInfo, riscv32_ISADecodeInfo);
-
-//#define isa_mmu_check(vaddr, len, type) (MMU_DIRECT)
 
 #endif

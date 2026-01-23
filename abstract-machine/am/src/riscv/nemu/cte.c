@@ -1,6 +1,11 @@
 #include <am.h>
 #include <riscv/riscv.h>
 #include <klib.h>
+// 确保这两个宏有定义，如果 riscv.h 里没定义，这里补上
+#ifndef KERNEL_MODE
+#define KERNEL_MODE 0 // 假设 KERNEL 是 0 (因为 ksp == 0 表示内核态)
+#define USER_MODE   1 // 假设 USER 是 1
+#endif
 
 static Context* (*user_handler)(Event, Context*) = NULL;
 
@@ -57,9 +62,11 @@ Context *kcontext(Area kstack, void (*entry)(void *), void *arg) {
   c->gpr[10] = (uintptr_t)arg;
   c->gpr[2] = (uintptr_t)c;
   asm volatile("mv %0, gp" : "=r"(c->gpr[3]));
+  
   // 2. 必须保留 pdir = NULL
   c->pdir = NULL;
-
+  // [新增] 标记为内核态
+  c->np = KERNEL_MODE;
   return c;
 }
 

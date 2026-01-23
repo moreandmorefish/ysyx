@@ -58,6 +58,7 @@ static vaddr_t *csr_register(word_t imm) {
     case 0x300: return &(cpu.csr.mstatus);
     case 0x305: return &(cpu.csr.mtvec);
     case 0x180: return &(cpu.csr.satp);
+    case 0x340: return &(cpu.csr.mscratch);
     default: panic("Unknown csr");
   }
 }
@@ -211,16 +212,26 @@ INSTPAT_START();
     // 1. 恢复 PC
     s->dnpc = CSR(0x341); // mepc
 
-    // 2. 恢复中断状态 (MIE = MPIE)
+    // 2. 恢复中断状态 (MIE / MPIE)
     word_t mstatus = CSR(0x300);
     bool mpie = (mstatus & MSTATUS_MPIE) != 0;
     if (mpie) mstatus |= MSTATUS_MIE; 
     else      mstatus &= ~MSTATUS_MIE;
+    mstatus |= MSTATUS_MPIE; // 按照规范，MPIE 设为 1
 
-    // 3. 规范要求：MPIE 必须置为 1
-    mstatus |= MSTATUS_MPIE;
+    /* ================= 新增逻辑开始 ================= */
+    
+    // 3. 恢复特权级 (从 MPP 恢复到 cpu.mode)
+    word_t mpp = (mstatus & MSTATUS_MPP) >> 11; // 读出 MPP
+    cpu.mode = mpp;  // 真正的“变身”在这里！
 
-    // 4. 写回 mstatus
+    // 4. 将 MPP 设置为 Machine Mode (为下一次做准备，通常设为 M 或者 U 都可以，规范推荐 M)
+    mstatus &= ~MSTATUS_MPP;
+    mstatus |= (M_MODE << 11);
+
+    /* ================= 新增逻辑结束 ================= */
+
+    // 写回 mstatus
     cpu.csr.mstatus = mstatus; 
   }));
 INSTPAT("0000000 00001 00000 000 00000 11100 11", ebreak , N, NEMUTRAP(s->pc, R(10))); // R(10) is $a0

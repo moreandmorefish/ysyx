@@ -22,22 +22,30 @@ word_t isa_raise_intr(word_t NO, vaddr_t epc) {
   /* 1. 保存当前 PC 到 mepc */
   cpu.csr.mepc = epc;
 
-  /* 2. 保存中断原因到 mcause */
+  /* 2. 保存中断原因 到 mcause */
   cpu.csr.mcause = NO;
 
-  /* 3. 硬件原子操作：保存并关闭中断 (Critical!) */
-  // a. 将 MIE (Bit 3) 保存到 MPIE (Bit 7)
+  /* 3. 保存并关闭中断 */
   if (cpu.csr.mstatus & MSTATUS_MIE) {
     cpu.csr.mstatus |= MSTATUS_MPIE;
   } else {
     cpu.csr.mstatus &= ~MSTATUS_MPIE;
   }
-  
-  // b. 关闭 MIE (Bit 3) -> 关中断
   cpu.csr.mstatus &= ~MSTATUS_MIE;
 
-  /* 4. 返回入口地址 mtvec */
-  // (通常 RISC-V 还有 Mode 判断，PA 中简化为直接跳 mtvec)
+  /* ================= 新增逻辑开始 ================= */
+  
+  // 4. 保存之前的特权级 (Previous Privilege) 到 MPP
+  // 假设你定义了 MSTATUS_MPP 为 0x1800 (也就是 11-12 位)
+  cpu.csr.mstatus &= ~MSTATUS_MPP;  // 清空 MPP
+  cpu.csr.mstatus |= (cpu.mode << 11); // 写入当前的 mode (比如 U_MODE=0, M_MODE=3)
+
+  // 5. 提升特权级到 Machine Mode
+  cpu.mode = M_MODE;
+  
+  /* ================= 新增逻辑结束 ================= */
+
+  /* 6. 返回入口地址 */
   return cpu.csr.mtvec;
 }
 

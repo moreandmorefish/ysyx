@@ -157,7 +157,8 @@ Context *ucontext(AddrSpace *as, Area kstack, void *entry) {
 
   // 5. [背包] 设定醒来后手里的栈指针 (指向用户栈底) <--- 你的问题3
   c->gpr[2] = (uintptr_t)as->area.end; 
-  
+  // [新增] 标记为用户态
+  c->np = USER_MODE;
   // 至于参数(问题2)，那是 Loader 之后往背包(用户栈)里塞东西的事，这里不管。
 
   return c;

@@ -32,6 +32,9 @@ static void restart() {
 
   /* The zero register is always 0. */
   cpu.gpr[0] = 0;
+  
+  /* [新增] CPU 复位后处于 Machine Mode */
+  cpu.mode = M_MODE;
 }
 
 void init_isa() {

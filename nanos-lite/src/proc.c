@@ -49,8 +49,8 @@ void init_proc() {
   // ================= 2. 修改初始化逻辑 =================
   
   //char *argv[] = {"/bin/busybox", "echo", "Hello", "Busybox", "from", "Nanos-lite", NULL};
-  context_kload(&pcb[0], hello_fun, "B");
-  context_uload(&pcb[1], "/bin/dummy", NULL);
+  context_uload(&pcb[0], "/bin/hello", NULL);
+  context_uload(&pcb[1], "/bin/pal", NULL);
   
 
   // 暂时注释掉加载用户程序，先测试内核线程切换
