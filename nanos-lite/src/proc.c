@@ -78,7 +78,7 @@ Context* schedule(Context *prev) {
   // ===========================================
 
   if (current == &pcb[0]) {
-      // 保持你原来的 Log 不动
+      // 保持你原来的 Log 不动z
       Log("DEBUG: Hello_fun gp register = %x", current->cp->gpr[3]);
   }
   else Log("DEBUG: dummy gp register = %x", current->cp->gpr[3]);
